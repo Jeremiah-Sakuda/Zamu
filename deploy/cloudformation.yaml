@@ -1,0 +1,201 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Zamu — an agent that keeps a volunteer roster covered.
+
+  One DynamoDB table, one Lambda serving the coordinator API and the volunteer's
+  one-tap pages behind a Function URL, and one scheduled Lambda running the loop.
+  Deliberately small: the organizations Zamu is for currently pay nothing for
+  anything, so the deployed cost has to round to nothing too.
+
+Parameters:
+  BaseUrl:
+    Type: String
+    Description: >
+      Public URL of the API, used to build the accept and decline links in emails.
+      Deploy once to get the Function URL, then update this and deploy again.
+    Default: ""
+
+  ConsoleOrigin:
+    Type: String
+    Description: Origin the coordinator console is served from, for CORS.
+    Default: http://localhost:3000
+
+  SesSender:
+    Type: String
+    Description: >
+      A verified SES identity. Leave empty and Zamu captures messages in an outbox
+      the console can read, which is a real delivery path rather than a stub.
+    Default: ""
+
+  ModelId:
+    Type: String
+    Description: Bedrock model for routine interpretation.
+    Default: us.anthropic.claude-haiku-4-5-20251001-v1:0
+
+  SweepSchedule:
+    Type: String
+    Default: rate(15 minutes)
+
+  RiskSchedule:
+    Type: String
+    Default: rate(1 hour)
+
+  BriefSchedule:
+    Type: String
+    Description: When the daily handover goes out. Default is 8am UTC.
+    Default: cron(0 8 * * ? *)
+
+  CoordinatorEmail:
+    Type: String
+    Description: Where the daily brief goes. Empty means the brief is skipped.
+    Default: ""
+
+Conditions:
+  HasSes: !Not [!Equals [!Ref SesSender, ""]]
+
+Globals:
+  Function:
+    Runtime: python3.13
+    Architectures: [arm64]
+    MemorySize: 512
+    Timeout: 60
+    Environment:
+      Variables:
+        ZAMU_STORE: dynamodb
+        ZAMU_DYNAMO_TABLE: !Ref RosterTable
+        ZAMU_BASE_URL: !Ref BaseUrl
+        ZAMU_CORS_ORIGINS: !Ref ConsoleOrigin
+        ZAMU_SES_SENDER: !Ref SesSender
+        ZAMU_MODEL_ID: !Ref ModelId
+
+Resources:
+  # ---------------------------------------------------------------- storage
+  RosterTable:
+    Type: AWS::DynamoDB::Table
+    # Retained on stack deletion. This table holds other people's commitments to
+    # each other; losing it to a `cloudformation delete-stack` typo is not an
+    # acceptable failure mode.
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - { AttributeName: pk, AttributeType: S }
+        - { AttributeName: sk, AttributeType: S }
+        - { AttributeName: token, AttributeType: S }
+        - { AttributeName: idem, AttributeType: S }
+      KeySchema:
+        - { AttributeName: pk, KeyType: HASH }
+        - { AttributeName: sk, KeyType: RANGE }
+      GlobalSecondaryIndexes:
+        # One-tap links resolve a token to an ask.
+        - IndexName: token-index
+          KeySchema: [{ AttributeName: token, KeyType: HASH }]
+          Projection: { ProjectionType: ALL }
+        # Idempotency claims are looked up before any mutation is attempted.
+        - IndexName: idempotency-index
+          KeySchema: [{ AttributeName: idem, KeyType: HASH }]
+          Projection: { ProjectionType: ALL }
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+
+  # ---------------------------------------------------------------- the API
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: Coordinator API and the volunteer's accept/decline pages.
+      CodeUri: ../
+      Handler: zamu.api.lambda_handler.handler
+      Timeout: 30
+      FunctionUrlConfig:
+        AuthType: NONE
+        Cors:
+          AllowOrigins: [!Ref ConsoleOrigin]
+          AllowMethods: [GET, POST, DELETE]
+          AllowHeaders: ["content-type"]
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref RosterTable }
+        - !If
+          - HasSes
+          - Statement:
+              - Effect: Allow
+                Action: [ses:SendEmail]
+                Resource: "*"
+          - !Ref AWS::NoValue
+        - Statement:
+            - Effect: Allow
+              Action: [bedrock:InvokeModel, bedrock:InvokeModelWithResponseStream]
+              Resource: "*"
+
+  # ---------------------------------------------------------------- the loop
+  ScheduledFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: >
+        The loop. One function, three schedules, chosen by `job` in the event input —
+        so all three share one warm container and one connection to the table.
+      CodeUri: ../
+      Handler: zamu.infra.scheduled.handler
+      Timeout: 120
+      Environment:
+        Variables:
+          ZAMU_COORDINATOR_EMAIL: !Ref CoordinatorEmail
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref RosterTable }
+        - !If
+          - HasSes
+          - Statement:
+              - Effect: Allow
+                Action: [ses:SendEmail]
+                Resource: "*"
+          - !Ref AWS::NoValue
+      Events:
+        Sweep:
+          Type: Schedule
+          Properties:
+            Schedule: !Ref SweepSchedule
+            Description: Expire lapsed asks, then advance every open gap by one ask.
+            Input: '{"job": "sweep"}'
+        Risk:
+          Type: Schedule
+          Properties:
+            Schedule: !Ref RiskSchedule
+            Description: Notice duties drifting into at-risk before the day of.
+            Input: '{"job": "risk"}'
+        Brief:
+          Type: Schedule
+          Properties:
+            Schedule: !Ref BriefSchedule
+            Description: >
+              The daily handover — sent only when there is a decision to make or work
+              Zamu completed. Most days it sends nothing.
+            Input: !Sub '{"job": "brief", "to": "${CoordinatorEmail}"}'
+
+  ApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${ApiFunction}
+      RetentionInDays: 30
+
+  ScheduledLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${ScheduledFunction}
+      RetentionInDays: 30
+
+Outputs:
+  ApiUrl:
+    Description: >
+      Point the console's NEXT_PUBLIC_ZAMU_API at this, and redeploy with BaseUrl set
+      to it so the one-tap links in emails resolve.
+    Value: !GetAtt ApiFunctionUrl.FunctionUrl
+
+  TableName:
+    Value: !Ref RosterTable
+
+  ScheduledFunctionName:
+    Description: Invoke directly to run a job on demand.
+    Value: !Ref ScheduledFunction

@@ -243,3 +243,16 @@ def test_agentcore_seeds_an_empty_store_once(wired):
     first = len(store.list_duties(DEMO_ORG_ID))
     agentcore.handle({"action": "status"})
     assert len(store.list_duties(DEMO_ORG_ID)) == first
+
+
+def test_the_coordinator_email_can_come_from_the_environment(wired, monkeypatch):
+    """So an operator sets the address once rather than in three schedule inputs."""
+    _store, notifier, _ = wired
+    scheduled.run_sweep({})
+    _accept_the_open_ask(_store)
+    notifier.clear()
+
+    monkeypatch.setenv("ZAMU_COORDINATOR_EMAIL", "nadia@example.org")
+    result = scheduled.run_brief({})
+    assert result["sent"]
+    assert notifier.sent[0][0].to_email == "nadia@example.org"

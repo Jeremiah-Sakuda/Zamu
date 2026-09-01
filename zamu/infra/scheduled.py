@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from datetime import timedelta
 from typing import Any
 
@@ -112,7 +113,11 @@ def run_brief(event: dict[str, Any] | None = None, settings: Settings | None = N
             )
             continue
 
-        recipient = to or event.get("coordinator_email")
+        # The schedule can name a recipient; otherwise fall back to the environment,
+        # so an operator sets the coordinator's address in one place.
+        recipient = to or event.get("coordinator_email") or os.environ.get(
+            "ZAMU_COORDINATOR_EMAIL", ""
+        ).strip()
         if not recipient:
             log.info(
                 json.dumps({"job": "brief", "org": org_id, "sent": False, "reason": "no recipient"})

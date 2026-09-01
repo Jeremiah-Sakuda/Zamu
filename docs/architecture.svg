@@ -1,0 +1,226 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 820" width="1240" height="820"
+     role="img" aria-labelledby="title desc" font-family="'Atkinson Hyperlegible', system-ui, -apple-system, 'Segoe UI', sans-serif">
+  <title id="title">Zamu architecture</title>
+  <desc id="desc">A volunteer withdrawal or a schedule wakes a Strands agent running on Bedrock AgentCore. Every tool call passes through an authority hook that cancels anything the organization has not granted. Permitted calls reach deterministic engines, which read and write DynamoDB, send through SES, and record a receipt that is only closed after the target is re-read.</desc>
+
+  <style>
+    :root { color-scheme: light dark; }
+    .bg      { fill: #F8FAFC; }
+    .band    { fill: #FFFFFF; stroke: #E2E8F0; }
+    .band-t  { fill: #475569; font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+    .box     { fill: #FFFFFF; stroke: #CBD5E1; }
+    .box-a   { fill: #E0F2FE; stroke: #0369A1; }
+    .box-g   { fill: #FEF3C7; stroke: #B45309; }
+    .box-d   { fill: #DCFCE7; stroke: #15803D; }
+    .h       { fill: #020617; font-size: 15px; font-weight: 700; }
+    .h2      { fill: #020617; font-size: 17px; font-weight: 700; }
+    .p       { fill: #475569; font-size: 12.5px; }
+    .mono    { fill: #0369A1; font-size: 11.5px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 700; }
+    .mono-d  { fill: #475569; font-size: 11.5px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .flow    { stroke: #64748B; stroke-width: 1.8; fill: none; }
+    .flow-a  { stroke: #0369A1; stroke-width: 2.4; fill: none; }
+    .flow-s  { stroke: #B45309; stroke-width: 2.2; fill: none; stroke-dasharray: 6 5; }
+    .lbl     { fill: #475569; font-size: 11.5px; }
+    .lbl-a   { fill: #0369A1; font-size: 11.5px; font-weight: 700; }
+    .lbl-s   { fill: #B45309; font-size: 11.5px; font-weight: 700; }
+    .title   { fill: #020617; font-size: 22px; font-weight: 700; }
+    .sub     { fill: #475569; font-size: 13.5px; }
+
+    @media (prefers-color-scheme: dark) {
+      .bg     { fill: #020617; }
+      .band   { fill: #0B1220; stroke: #1E293B; }
+      .band-t { fill: #94A3B8; }
+      .box    { fill: #0F172A; stroke: #334155; }
+      .box-a  { fill: #082F49; stroke: #38BDF8; }
+      .box-g  { fill: #3B2A05; stroke: #FBBF24; }
+      .box-d  { fill: #052E16; stroke: #4ADE80; }
+      .h, .h2, .title { fill: #F8FAFC; }
+      .p, .lbl, .sub, .mono-d { fill: #94A3B8; }
+      .mono, .lbl-a { fill: #38BDF8; }
+      .flow   { stroke: #94A3B8; }
+      .flow-a { stroke: #38BDF8; }
+      .flow-s { stroke: #FBBF24; }
+      .lbl-s  { fill: #FBBF24; }
+    }
+  </style>
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#64748B"/>
+    </marker>
+    <marker id="arrow-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#0369A1"/>
+    </marker>
+    <marker id="arrow-s" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#B45309"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" width="1240" height="820"/>
+
+  <text class="title" x="40" y="46">Zamu</text>
+  <text class="sub" x="40" y="70">The model chooses which tool to call. It never computes the answer, and it cannot reach a tool the organization has not granted.</text>
+
+  <!-- ============================================== 1. WHAT WAKES IT -->
+  <rect class="band" x="40" y="100" width="230" height="330" rx="14"/>
+  <text class="band-t" x="60" y="128">1 · What wakes it</text>
+
+  <rect class="box" x="60" y="144" width="190" height="66" rx="10"/>
+  <text class="h" x="76" y="168">Volunteer</text>
+  <text class="p" x="76" y="188">Taps accept or decline,</text>
+  <text class="p" x="76" y="203">or replies to say no</text>
+
+  <rect class="box" x="60" y="222" width="190" height="66" rx="10"/>
+  <text class="h" x="76" y="246">Coordinator</text>
+  <text class="p" x="76" y="266">Console: marks a drop-out,</text>
+  <text class="p" x="76" y="281">changes a grant</text>
+
+  <rect class="box" x="60" y="300" width="190" height="82" rx="10"/>
+  <text class="h" x="76" y="324">EventBridge</text>
+  <text class="mono-d" x="76" y="344">sweep · every 15 min</text>
+  <text class="mono-d" x="76" y="360">risk  · hourly</text>
+  <text class="mono-d" x="76" y="376">brief · daily</text>
+
+  <text class="p" x="60" y="408">Nobody opens Zamu. It runs.</text>
+
+  <!-- ============================================== 2. AGENT -->
+  <rect class="band" x="300" y="100" width="330" height="560" rx="14"/>
+  <text class="band-t" x="320" y="128">2 · Strands agent · AgentCore runtime</text>
+
+  <rect class="box-a" x="320" y="144" width="290" height="88" rx="10"/>
+  <text class="h2" x="338" y="170">Strands Agent</text>
+  <text class="p" x="338" y="191">Reads a message, resolves who and</text>
+  <text class="p" x="338" y="207">which shift, chooses the next tool.</text>
+  <text class="mono" x="338" y="225">Bedrock · Haiku 4.5 → Sonnet 4.5</text>
+
+  <path class="flow-a" d="M465 232 L465 268" marker-end="url(#arrow-a)"/>
+  <text class="lbl-a" x="476" y="256">tool call</text>
+
+  <!-- the gate -->
+  <rect class="box-g" x="320" y="278" width="290" height="150" rx="10"/>
+  <text class="h2" x="338" y="304">Authority hook</text>
+  <text class="mono-d" x="338" y="324">BeforeToolCallEvent → cancel_tool</text>
+  <text class="p" x="338" y="348">Checks the action class against grants</text>
+  <text class="p" x="338" y="364">a named human created. No grant, no</text>
+  <text class="p" x="338" y="380">call — the tool body never runs.</text>
+  <text class="p" x="338" y="404">A tool missing from the table is</text>
+  <text class="p" x="338" y="420">refused, so omission fails closed.</text>
+
+  <path class="flow-a" d="M420 428 L420 470" marker-end="url(#arrow-a)"/>
+  <text class="lbl-a" x="332" y="452">permitted</text>
+
+  <path class="flow-s" d="M556 428 C 556 470, 556 470, 556 502" marker-end="url(#arrow-s)"/>
+  <text class="lbl-s" x="566" y="452">refused</text>
+
+  <rect class="box" x="320" y="480" width="180" height="70" rx="10"/>
+  <text class="h" x="338" y="504">Typed tools</text>
+  <text class="p" x="338" y="524">10 tools, each a thin</text>
+  <text class="p" x="338" y="539">wrapper. No judgement.</text>
+
+  <rect class="box-g" x="512" y="480" width="98" height="70" rx="10"/>
+  <text class="h" x="528" y="504">Stop</text>
+  <text class="p" x="528" y="523">Tell the</text>
+  <text class="p" x="528" y="538">coordinator</text>
+
+  <rect class="box" x="320" y="568" width="290" height="74" rx="10"/>
+  <text class="h" x="338" y="592">Session memory</text>
+  <text class="p" x="338" y="612">A single fill can span days. AgentCore</text>
+  <text class="p" x="338" y="628">carries the attempt across them.</text>
+
+  <!-- ============================================== 3. DETERMINISTIC CORE -->
+  <rect class="band" x="660" y="100" width="330" height="560" rx="14"/>
+  <text class="band-t" x="680" y="128">3 · Deterministic core · 226 tests</text>
+
+  <rect class="box-d" x="680" y="144" width="290" height="72" rx="10"/>
+  <text class="h" x="698" y="168">Coverage</text>
+  <text class="p" x="698" y="188">covered · at risk · uncovered · unknown</text>
+  <text class="p" x="698" y="204">Unknown is never shown as covered.</text>
+
+  <rect class="box-d" x="680" y="226" width="290" height="72" rx="10"/>
+  <text class="h" x="698" y="250">Eligibility</text>
+  <text class="p" x="698" y="270">Trained, free, not double-booked, not</text>
+  <text class="p" x="698" y="286">over-asked. Every no has a sentence.</text>
+
+  <rect class="box-d" x="680" y="308" width="290" height="88" rx="10"/>
+  <text class="h" x="698" y="332">Fairness + ranking</text>
+  <text class="p" x="698" y="352">fairness ·45  fit ·20  responsiveness ·20</text>
+  <text class="p" x="698" y="368">notice ·10  rest ·05 — deterministic to</text>
+  <text class="p" x="698" y="384">the tie-break, and it explains itself.</text>
+
+  <rect class="box-d" x="680" y="406" width="290" height="72" rx="10"/>
+  <text class="h" x="698" y="430">One ask at a time</text>
+  <text class="p" x="698" y="450">One person, one shift, bounded window.</text>
+  <text class="p" x="698" y="466">Broadcast is the failure mode.</text>
+
+  <rect class="box-d" x="680" y="488" width="290" height="88" rx="10"/>
+  <text class="h" x="698" y="512">Verification</text>
+  <text class="p" x="698" y="532">Write, then re-read the target and</text>
+  <text class="p" x="698" y="548">compare. A success response is a</text>
+  <text class="p" x="698" y="564">claim, not a fact.</text>
+
+  <rect class="box-d" x="680" y="586" width="290" height="56" rx="10"/>
+  <text class="h" x="698" y="610">Ledger</text>
+  <text class="p" x="698" y="630">Opened before acting, closed after proof.</text>
+
+  <!-- ============================================== 4. AWS -->
+  <rect class="band" x="1020" y="100" width="180" height="560" rx="14"/>
+  <text class="band-t" x="1038" y="128">4 · AWS</text>
+
+  <rect class="box" x="1038" y="144" width="144" height="76" rx="10"/>
+  <text class="h" x="1054" y="168">DynamoDB</text>
+  <text class="p" x="1054" y="188">Roster, grants,</text>
+  <text class="p" x="1054" y="204">append-only ledger</text>
+
+  <rect class="box" x="1038" y="232" width="144" height="76" rx="10"/>
+  <text class="h" x="1054" y="256">SES</text>
+  <text class="p" x="1054" y="276">One ask out,</text>
+  <text class="p" x="1054" y="292">replies back in</text>
+
+  <rect class="box" x="1038" y="320" width="144" height="76" rx="10"/>
+  <text class="h" x="1054" y="344">Lambda</text>
+  <text class="p" x="1054" y="364">API Gateway,</text>
+  <text class="p" x="1054" y="380">one-tap links</text>
+
+  <rect class="box" x="1038" y="408" width="144" height="76" rx="10"/>
+  <text class="h" x="1054" y="432">CloudWatch</text>
+  <text class="p" x="1054" y="452">One fill traced</text>
+  <text class="p" x="1054" y="468">end to end</text>
+
+  <rect class="box" x="1038" y="496" width="144" height="90" rx="10"/>
+  <text class="h" x="1054" y="520">Local</text>
+  <text class="p" x="1054" y="540">SQLite + outbox</text>
+  <text class="p" x="1054" y="556">run the same code</text>
+  <text class="p" x="1054" y="572">with no account</text>
+
+  <!-- ============================================== FLOW ARROWS -->
+  <path class="flow" d="M250 190 C 280 190, 288 188, 316 188" marker-end="url(#arrow)"/>
+  <path class="flow" d="M250 255 C 282 255, 290 200, 316 194" marker-end="url(#arrow)"/>
+  <path class="flow" d="M250 340 C 284 340, 292 210, 316 200" marker-end="url(#arrow)"/>
+
+  <path class="flow-a" d="M500 515 C 600 515, 620 350, 676 350" marker-end="url(#arrow-a)"/>
+  <text class="lbl-a" x="596" y="424">calls</text>
+
+  <path class="flow" d="M970 180 C 1000 180, 1006 180, 1034 182" marker-end="url(#arrow)"/>
+  <path class="flow" d="M970 442 C 1000 442, 1006 280, 1034 272" marker-end="url(#arrow)"/>
+  <path class="flow" d="M970 614 C 1000 614, 1006 460, 1034 448" marker-end="url(#arrow)"/>
+
+  <!-- return path: the receipt -->
+  <path class="flow" d="M676 620 C 640 620, 636 660, 606 660 L 340 660 C 320 660, 318 646, 318 636" marker-end="url(#arrow)"/>
+  <text class="lbl" x="640" y="678">receipt: intended, observed, rule</text>
+
+  <!-- ============================================== FOOTER -->
+  <rect class="band" x="40" y="690" width="1160" height="96" rx="14"/>
+  <text class="h2" x="64" y="722">The trust ladder</text>
+  <text class="p" x="64" y="746">Each rung is granted separately. Granting one never grants the next, and the checks run in ordinary code before any tool call.</text>
+
+  <text class="mono-d" x="64" y="772">0 read</text>
+  <text class="lbl" x="120" y="772">on by default</text>
+  <text class="mono-d" x="232" y="772">1 draft an ask</text>
+  <text class="lbl" x="336" y="772">nothing leaves</text>
+  <text class="mono-d" x="452" y="772">2 send an ask</text>
+  <text class="lbl" x="552" y="772">opt-in + quiet hours</text>
+  <text class="mono-d" x="692" y="772">3 update the roster</text>
+  <text class="lbl" x="828" y="772">needs an acceptance</text>
+  <text class="mono-d" x="968" y="772">4 reassign without asking</text>
+  <text class="lbl-s" x="1140" y="772">never</text>
+</svg>
