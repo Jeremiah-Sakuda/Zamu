@@ -226,3 +226,28 @@ def test_idempotency_keys_collide_only_for_the_same_logical_action():
     assert b == ask_idempotency_key("dut_1", "per_1")
     assert b != ask_idempotency_key("dut_1", "per_2")
     assert b != ask_idempotency_key("dut_2", "per_1")
+
+
+def test_receipts_are_ordered_by_creation_time():
+    """The ordering contract, stated once so it is not accidentally relied on further.
+
+    Entries are ordered by when they were created. Two entries stamped at the same
+    instant have no defined order relative to each other — every backing is free to
+    break that tie however it likes, and DynamoDB breaks it on a random id.
+
+    The alternative is putting a monotonic counter into `created_at`, which makes the
+    timestamp a lie and leaves the process carrying global state that a clock skew
+    poisons for its whole lifetime. A microsecond-resolution clock separates every real
+    pair of writes anyway.
+    """
+    store = InMemoryStore()
+    clock = FixedClock(f.NOW)
+    led = Ledger(store, clock)
+
+    for i in range(3):
+        led.begin(_action(), _allowed(), {"n": i}, f"ordered_{i}")
+        clock.advance(0.5)
+
+    stamps = [r.created_at for r in led.recent(f.ORG_ID)]
+    assert stamps == sorted(stamps, reverse=True)
+    assert len(set(stamps)) == 3

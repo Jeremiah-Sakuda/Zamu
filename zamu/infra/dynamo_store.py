@@ -272,7 +272,18 @@ class DynamoStore:
     @staticmethod
     def _action_sk(record: ActionRecord) -> str:
         """Timestamp first so the range key sorts chronologically, id last so it is
-        unique when two entries land in the same microsecond."""
+        unique when two entries land in the same microsecond.
+
+        Ordering is therefore *by creation time*, and two entries stamped at the same
+        instant have no defined order relative to each other — they sort by id, which
+        is random. That is the honest contract, and it is why the parity test compares
+        receipts as a multiset rather than a list: pretending otherwise would mean
+        putting a monotonic counter in the timestamp, which makes `created_at` a lie
+        and leaves the process carrying global state a clock skew can poison.
+
+        In practice the microsecond-resolution system clock separates every real pair
+        of writes; it is a fixed clock in tests that collides them, every time.
+        """
         return f"{ACTION}#{record.created_at.isoformat()}#{record.id}"
 
     def append_action(self, record: ActionRecord) -> ActionRecord:

@@ -55,7 +55,7 @@ right person, and the coordinator sees proof.
 
 **1 · Models interpret. Deterministic code decides.**
 The model reads a message and works out who and which shift. Eligibility, fairness,
-ranking, authority and verification are ordinary Python functions with 226 tests
+ranking, authority and verification are ordinary Python functions with 252 tests
 behind them. The agent chooses *which* tool to call and in what order; it never
 computes the answer. That is what makes it possible to show a coordinator the ranking
 and tell them, truthfully, that the same inputs always produce the same order.
@@ -259,7 +259,7 @@ fails loudly instead of quietly changing who gets asked.
 .venv/bin/python -m pytest
 ```
 
-226 tests, and they are the argument rather than the ceremony. The ones worth reading
+252 tests, and they are the argument rather than the ceremony. The ones worth reading
 first:
 
 - `tests/test_authority.py` — the gate, rule by rule, including that a grant for the

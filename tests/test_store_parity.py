@@ -8,6 +8,7 @@ are compared field by field.
 
 from __future__ import annotations
 
+import json
 import tempfile
 from pathlib import Path
 
@@ -73,12 +74,23 @@ def _run(store) -> dict:
         "asked": (asked.outcome, asked.person_id, asked.policy_rule, asked.rationale),
         "accepted": (accepted.outcome, accepted.verified, accepted.person_id),
         "assigned": duty.assigned_person_id,
-        # Randomly generated ask ids cannot match across two independent runs, so
-        # compare the shape of each receipt rather than its identifiers.
-        "receipts": [
-            (r.action_class, r.result, r.policy_rule, _scrub(r.intended), _scrub(r.observed))
-            for r in reversed(service.ledger.recent(f.ORG_ID))
-        ],
+        # Two things are deliberately normalised. Randomly generated ask ids cannot
+        # match across two independent runs, so identifiers are scrubbed. And the whole
+        # script runs on a fixed clock, so every receipt shares one timestamp — under
+        # which DynamoDB's chronological sort key has no defined order. Sorting makes
+        # the comparison about content, which is what parity actually means.
+        "receipts": sorted(
+            
+                (
+                    int(r.action_class),
+                    r.result.value,
+                    r.policy_rule,
+                    json.dumps(_scrub(r.intended), sort_keys=True),
+                    json.dumps(_scrub(r.observed), sort_keys=True),
+                )
+                for r in service.ledger.recent(f.ORG_ID)
+            
+        ),
     }
 
 
