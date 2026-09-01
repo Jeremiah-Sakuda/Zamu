@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -77,10 +78,22 @@ CREATE INDEX IF NOT EXISTS actions_by_seq ON actions (org_id, seq);
 
 
 class SqliteStore:
-    """Durable Store over a single SQLite file. Safe to share across threads."""
+    """Durable Store over a single SQLite file.
+
+    Every public method takes `_lock`. `check_same_thread=False` disables sqlite3's
+    *check*, not its thread safety: a single connection shared between threads
+    interleaves statements on one cursor, and concurrent readers get each other's
+    results. Under a threadpooled web server that surfaces as a roster that exists on
+    one request and 404s on the next — which is exactly how it was found.
+
+    A single lock is the right instrument at this scale. Zamu serves one small
+    organization per process, the operations are sub-millisecond, and correctness
+    here is worth far more than concurrency.
+    """
 
     def __init__(self, path: str | Path = "zamu.sqlite") -> None:
         self.path = str(path)
+        self._lock = threading.RLock()
         if self.path != ":memory:":
             Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(self.path, check_same_thread=False)
@@ -91,19 +104,22 @@ class SqliteStore:
             self._conn.executescript(SCHEMA)
 
     def close(self) -> None:
-        self._conn.close()
+        with self._lock:
+            self._conn.close()
 
     # -- helpers ---------------------------------------------------------------------
 
     def _write(self, sql: str, params: tuple) -> None:
-        with self._conn:
+        with self._lock, self._conn:
             self._conn.execute(sql, params)
 
     def _rows(self, sql: str, params: tuple = ()) -> list[sqlite3.Row]:
-        return self._conn.execute(sql, params).fetchall()
+        with self._lock:
+            return self._conn.execute(sql, params).fetchall()
 
     def _one(self, sql: str, params: tuple) -> sqlite3.Row | None:
-        return self._conn.execute(sql, params).fetchone()
+        with self._lock:
+            return self._conn.execute(sql, params).fetchone()
 
     @staticmethod
     def _doc(row: sqlite3.Row | None) -> dict[str, Any] | None:
@@ -241,24 +257,26 @@ class SqliteStore:
     def append_action(self, record: ActionRecord) -> ActionRecord:
         """Append-only by construction: the unique index on the idempotency key means a
         repeated attempt collides at the database rather than relying on a prior read."""
-        row = self._one(
-            "SELECT COALESCE(MAX(seq), 0) + 1 AS next FROM actions WHERE org_id = ?",
-            (record.org_id,),
-        )
-        self._write(
-            "INSERT INTO actions (org_id, id, seq, idempotency_key, doc) VALUES (?, ?, ?, ?, ?)",
-            (
-                record.org_id,
-                record.id,
-                int(row["next"]),
-                record.idempotency_key,
-                json.dumps(serde.dump_action(record)),
-            ),
-        )
+        with self._lock, self._conn:
+            row = self._conn.execute(
+                "SELECT COALESCE(MAX(seq), 0) + 1 AS next FROM actions WHERE org_id = ?",
+                (record.org_id,),
+            ).fetchone()
+            self._conn.execute(
+                "INSERT INTO actions (org_id, id, seq, idempotency_key, doc) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    record.org_id,
+                    record.id,
+                    int(row["next"]),
+                    record.idempotency_key,
+                    json.dumps(serde.dump_action(record)),
+                ),
+            )
         return record
 
     def update_action(self, record: ActionRecord) -> ActionRecord:
-        with self._conn:
+        with self._lock, self._conn:
             cursor = self._conn.execute(
                 "UPDATE actions SET doc = ? WHERE org_id = ? AND id = ?",
                 (json.dumps(serde.dump_action(record)), record.org_id, record.id),
@@ -293,6 +311,13 @@ class SqliteStore:
     # -- composition -----------------------------------------------------------------
 
     def load_roster(self, org_id: str) -> Roster:
+        # Five reads that must all describe the same instant. Held under one lock so a
+        # concurrent write cannot land between the duties and the asks and produce a
+        # roster that never existed.
+        with self._lock:
+            return self._load_roster(org_id)
+
+    def _load_roster(self, org_id: str) -> Roster:
         org = self.get_org(org_id)
         if org is None:
             raise NotFound(f"no organization {org_id}")
@@ -310,7 +335,7 @@ class SqliteStore:
         Used only to reset the public sandbox between visitors. Scoped by org_id on
         every table so it cannot reach past the demo into a real roster.
         """
-        with self._conn:
+        with self._lock, self._conn:
             for table in ("actions", "asks", "duties", "people", "grants"):
                 self._conn.execute(f"DELETE FROM {table} WHERE org_id = ?", (org_id,))
             self._conn.execute("DELETE FROM orgs WHERE id = ?", (org_id,))

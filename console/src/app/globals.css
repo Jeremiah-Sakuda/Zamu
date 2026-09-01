@@ -1,0 +1,148 @@
+@import "tailwindcss";
+
+/* Design system: Accessible & Ethical (design-system/zamu/MASTER.md).
+   High-contrast navy and blue, Atkinson Hyperlegible, 4.5:1 minimum on all text,
+   visible focus rings, 44px touch targets, motion kept at 2/10.
+   Tokens are named for their role, never for their colour, so dark mode is a
+   redefinition rather than a set of overrides sprinkled through the components. */
+
+:root {
+  --color-primary: #0f172a;
+  --color-on-primary: #ffffff;
+  --color-secondary: #334155;
+  --color-accent: #0369a1;
+  --color-on-accent: #ffffff;
+  --color-background: #f8fafc;
+  --color-foreground: #020617;
+  --color-card: #ffffff;
+  --color-card-foreground: #020617;
+  --color-muted: #e8ecf1;
+  --color-muted-foreground: #475569;
+  --color-border: #e2e8f0;
+  --color-destructive: #dc2626;
+  --color-on-destructive: #ffffff;
+  --color-ring: #0369a1;
+
+  /* Coverage states. Each is paired with an icon and a word in the UI —
+     never colour alone. */
+  --color-covered: #15803d;
+  --color-covered-soft: #dcfce7;
+  --color-at-risk: #b45309;
+  --color-at-risk-soft: #fef3c7;
+  --color-uncovered: #dc2626;
+  --color-uncovered-soft: #fee2e2;
+  --color-unknown: #0369a1;
+  --color-unknown-soft: #e0f2fe;
+
+  --radius: 12px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-primary: #e2e8f0;
+    --color-on-primary: #020617;
+    --color-secondary: #94a3b8;
+    --color-accent: #38bdf8;
+    --color-on-accent: #020617;
+    --color-background: #020617;
+    --color-foreground: #f8fafc;
+    --color-card: #0b1220;
+    --color-card-foreground: #f8fafc;
+    --color-muted: #1e293b;
+    --color-muted-foreground: #94a3b8;
+    --color-border: #1e293b;
+    --color-destructive: #f87171;
+    --color-on-destructive: #020617;
+    --color-ring: #38bdf8;
+
+    --color-covered: #4ade80;
+    --color-covered-soft: #052e16;
+    --color-at-risk: #fbbf24;
+    --color-at-risk-soft: #3b2a05;
+    --color-uncovered: #f87171;
+    --color-uncovered-soft: #3f1414;
+    --color-unknown: #38bdf8;
+    --color-unknown-soft: #082f49;
+  }
+}
+
+@theme inline {
+  --color-primary: var(--color-primary);
+  --color-on-primary: var(--color-on-primary);
+  --color-secondary: var(--color-secondary);
+  --color-accent: var(--color-accent);
+  --color-on-accent: var(--color-on-accent);
+  --color-background: var(--color-background);
+  --color-foreground: var(--color-foreground);
+  --color-card: var(--color-card);
+  --color-card-foreground: var(--color-card-foreground);
+  --color-muted: var(--color-muted);
+  --color-muted-foreground: var(--color-muted-foreground);
+  --color-border: var(--color-border);
+  --color-destructive: var(--color-destructive);
+  --color-on-destructive: var(--color-on-destructive);
+  --color-ring: var(--color-ring);
+  --color-covered: var(--color-covered);
+  --color-covered-soft: var(--color-covered-soft);
+  --color-at-risk: var(--color-at-risk);
+  --color-at-risk-soft: var(--color-at-risk-soft);
+  --color-uncovered: var(--color-uncovered);
+  --color-uncovered-soft: var(--color-uncovered-soft);
+  --color-unknown: var(--color-unknown);
+  --color-unknown-soft: var(--color-unknown-soft);
+  --font-sans: var(--font-atkinson), system-ui, -apple-system, sans-serif;
+  --radius-card: 12px;
+}
+
+html {
+  background: var(--color-background);
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-atkinson), system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* A focus ring you can actually see. Removing these is the first anti-pattern
+   the design system names. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 3px solid var(--color-ring);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+::selection {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+/* Motion 2/10: transitions exist to show that state changed, not to perform. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@keyframes zamu-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+.zamu-enter {
+  animation: zamu-fade-in 220ms ease-out both;
+}
+
+/* Wide content scrolls inside its own container; the page body never does. */
+.scroll-x {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}

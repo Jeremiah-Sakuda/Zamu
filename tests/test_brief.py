@@ -71,7 +71,7 @@ def test_an_unfillable_gap_is_a_decision_for_the_coordinator():
     assert len(brief.needs_decision) == 1
     assert "uncovered" in brief.needs_decision[0].headline
     detail = brief.needs_decision[0].detail
-    assert "your call" in detail or "human decision" in detail
+    assert "needs a human" in detail
 
 
 def test_refusals_are_grouped_by_rule_so_one_missing_grant_reads_as_one_problem():
@@ -138,3 +138,24 @@ def test_the_brief_serialises_for_the_console():
     assert payload["org_name"] == "Riverside Food Bank"
     assert isinstance(payload["waiting"], list)
     assert payload["needs_human"] is False
+
+
+def test_a_gap_zamu_can_still_work_on_stays_out_of_the_brief():
+    """Telling a coordinator about work already in hand is the interruption this
+    product exists to remove. The coverage board shows it; the brief stays quiet."""
+    service, store, _ = build()
+    brief = build_brief(store, f.ORG_ID, f.NOW)
+
+    assert brief.needs_decision == ()
+    assert not brief.needs_human
+    assert service.rank_for(f.ORG_ID, "dut_thursday").has_candidates
+
+
+def test_the_brief_escalates_once_the_last_candidate_has_been_asked():
+    service, store, _ = build(people=(f.MARCUS,))
+    asked = service.ask_next(f.ORG_ID, "dut_thursday")
+    service.record_response(store.get_ask(f.ORG_ID, asked.ask_id).token, accept=False)
+
+    brief = build_brief(store, f.ORG_ID, f.NOW)
+    assert brief.needs_human
+    assert "has now been asked" in brief.needs_decision[0].detail

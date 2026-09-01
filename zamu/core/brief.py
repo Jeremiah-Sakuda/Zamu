@@ -28,6 +28,7 @@ from zamu.core.models import (
     CoverageState,
     Roster,
 )
+from zamu.core.ranking import rank
 from zamu.core.store import Store
 
 
@@ -198,7 +199,6 @@ def _needs_decision(
     """Gaps with nobody left to ask, and acceptances Zamu could not finish."""
     out: list[Item] = []
 
-    asked_ids = {a.person_id for a in roster.asks}
     for assessment in assess_roster(roster, now):
         duty = roster.duty(assessment.duty_id)
         if duty is None or duty.cancelled or duty.start <= now:
@@ -207,15 +207,25 @@ def _needs_decision(
             continue
         if any(a.state.is_open and not a.is_expired(now) for a in roster.asks_for_duty(duty.id)):
             continue
-        exhausted = len(asked_ids) > 0
+
+        # An uncovered duty is only a decision for the coordinator once Zamu has run
+        # out of people it may ask. While somebody is still askable this is Zamu's
+        # job, and putting it in the brief would be interrupting a human to tell them
+        # about work that is already in hand — the exact behaviour this product exists
+        # to remove. The coverage board still shows it; the brief stays quiet.
+        order = rank(duty, roster, now)
+        if order.has_candidates:
+            continue
+
+        already_asked = bool(roster.asks_for_duty(duty.id))
         out.append(
             Item(
                 headline=f"{duty.title}, {format_when(duty, roster.org.timezone)} is uncovered",
                 detail=(
-                    "Everyone Zamu is allowed to ask has been asked. Reducing scope or "
-                    "widening permission is your call."
-                    if exhausted
-                    else "Nobody eligible is available. This one needs a human decision."
+                    "Everyone Zamu is allowed to ask has now been asked. Reducing scope "
+                    "or widening permission is your call."
+                    if already_asked
+                    else "Nobody eligible is available for this one. It needs a human."
                 ),
                 duty_id=duty.id,
             )

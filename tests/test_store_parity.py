@@ -16,7 +16,7 @@ import pytest
 from tests import factories as f
 from zamu.core.clock import FixedClock
 from zamu.core.fill import CoverageService, Outcome, ResponseOutcome
-from zamu.core.models import ActionClass
+from zamu.core.models import ActionClass, ActionRecord
 from zamu.core.store import InMemoryStore
 from zamu.infra.notify import OutboxNotifier
 from zamu.infra.sqlite_store import SqliteStore
@@ -146,5 +146,63 @@ def test_the_idempotency_index_is_enforced_by_the_database(tmp_path: Path):
 
         with pytest.raises(sqlite3.IntegrityError):
             db.append_action(replace(record, id="act_two", summary="second"))
+    finally:
+        db.close()
+
+
+def test_sqlite_survives_concurrent_readers_and_writers(tmp_path: Path):
+    """Found in the browser, not in a test: a shared connection interleaved statements
+    and a roster that plainly existed came back as a 404 on one of three parallel
+    requests. `check_same_thread=False` disables sqlite3's check, not its thread
+    safety, so every operation now takes a lock."""
+    import threading
+
+    db = SqliteStore(tmp_path / "threads.sqlite")
+    try:
+        _seed(db)
+        service = CoverageService(db, FixedClock(f.NOW), OutboxNotifier(), base_url="https://t")
+        errors: list[BaseException] = []
+        seen: list[int] = []
+
+        def reader() -> None:
+            try:
+                for _ in range(40):
+                    roster = db.load_roster(f.ORG_ID)
+                    seen.append(len(roster.people))
+                    service.rank_for(f.ORG_ID, "dut_thursday")
+                    db.list_actions(f.ORG_ID)
+            except BaseException as exc:  # noqa: BLE001 - the point is to catch anything
+                errors.append(exc)
+
+        def writer() -> None:
+            try:
+                for i in range(20):
+                    duty = f.duty(f"dut_w{i}", f.local(2026, 9, 10, 9))
+                    db.put_duty(duty)
+                    db.append_action(
+                        ActionRecord(
+                            id=f"act_w{i}",
+                            org_id=f.ORG_ID,
+                            idempotency_key=f"key_w{i}",
+                            action_class=ActionClass.SEND_ASK,
+                            summary="concurrent",
+                            intended={},
+                            policy_rule="R6",
+                            created_at=f.NOW,
+                        )
+                    )
+            except BaseException as exc:  # noqa: BLE001
+                errors.append(exc)
+
+        threads = [threading.Thread(target=reader) for _ in range(4)]
+        threads.append(threading.Thread(target=writer))
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert errors == []
+        assert set(seen) == {5}  # every read saw the whole roster, every time
+        assert len({a.id for a in db.list_actions(f.ORG_ID)}) == 20
     finally:
         db.close()
