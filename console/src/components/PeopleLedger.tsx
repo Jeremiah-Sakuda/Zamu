@@ -37,7 +37,8 @@ export function PeopleLedger({ people, org }: { people: Person[]; org: Org }) {
                 ) : null}
               </h3>
               <span className="font-mono text-sm tabular-nums text-muted-foreground">
-                {person.hours_carried.toFixed(1)}h · {person.shifts_carried} shifts
+                {person.hours_carried.toFixed(1)}h · {person.shifts_carried}{" "}
+                {person.shifts_carried === 1 ? "shift" : "shifts"}
               </span>
             </div>
 

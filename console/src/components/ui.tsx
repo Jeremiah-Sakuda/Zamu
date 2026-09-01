@@ -267,7 +267,7 @@ export function Meter({
   const pct = Math.max(0, Math.min(1, value)) * 100;
   return (
     <div className="flex items-center gap-2">
-      <span className="w-28 shrink-0 text-xs text-muted-foreground">{label}</span>
+      <span className="w-20 shrink-0 text-xs text-muted-foreground sm:w-28">{label}</span>
       <span
         className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-muted"
         role="img"

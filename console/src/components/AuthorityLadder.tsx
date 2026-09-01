@@ -68,7 +68,9 @@ export function AuthorityLadder({
                   <span className="grid size-6 shrink-0 place-items-center rounded-full bg-muted font-mono text-xs text-muted-foreground">
                     {grant.level}
                   </span>
-                  <h3 className="font-bold capitalize">{grant.label}</h3>
+                  {/* Sentence case, not `capitalize`: title-casing turns "draft an ask" into
+                      "Draft An Ask". */}
+                  <h3 className="font-bold first-letter:uppercase">{grant.label}</h3>
                   {grant.forbidden ? (
                     <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold text-muted-foreground">
                       <LockIcon className="size-3" />
