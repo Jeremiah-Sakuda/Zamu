@@ -173,17 +173,34 @@ def fairness_debt(
     return round(mean_load - record.weighted_load(org.unsociable_hour_weight), 4)
 
 
-def normalised_debt(debt: float, spread: float) -> float:
+def debt_scale(debts: list[float]) -> float:
+    """The typical distance from the team average, used to normalise a raw debt.
+
+    Mean absolute deviation rather than the largest deviation, and the difference
+    matters more than it looks.
+
+    With a max-based scale, one person carrying far more than everyone else stretches
+    the denominator until every ordinary difference collapses toward the middle. In a
+    roster where Amara has done 65 hours and the rest have done under ten, the seven
+    hours between two candidates normalise to almost nothing, fairness stops
+    discriminating, and the other components decide — which is precisely backwards,
+    because a lopsided roster is the exact situation this product exists for.
+    """
+    if not debts:
+        return 0.0
+    return sum(abs(d) for d in debts) / len(debts)
+
+
+def normalised_debt(debt: float, scale: float) -> float:
     """Squash a raw debt in hours into 0..1 for use as a ranking component.
 
-    `spread` is the largest absolute debt in the cohort. When everybody has carried
-    the same amount the spread is zero, every candidate scores 0.5, and the other
-    ranking components decide the order — which is the correct behaviour, not a
-    degenerate one.
+    When everybody has carried the same amount the scale is zero, every candidate
+    scores 0.5, and the other ranking components decide the order — which is the
+    correct behaviour, not a degenerate one.
     """
-    if spread <= 0:
+    if scale <= 0:
         return 0.5
-    return max(0.0, min(1.0, 0.5 + (debt / (2.0 * spread))))
+    return max(0.0, min(1.0, 0.5 + (debt / (2.0 * scale))))
 
 
 def ask_budget_remaining(record: FairnessRecord, org: Org, now: datetime, roster: Roster) -> int:

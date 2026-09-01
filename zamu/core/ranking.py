@@ -19,6 +19,7 @@ from zamu.core.eligibility import Eligibility, evaluate_all
 from zamu.core.fairness import (
     build_records,
     cohort_mean_load,
+    debt_scale,
     describe_load,
     fairness_debt,
     normalised_debt,
@@ -267,7 +268,7 @@ def rank(
         for pid in eligible_ids
         if pid in records
     }
-    spread = max((abs(d) for d in debts.values()), default=0.0)
+    scale = debt_scale(list(debts.values()))
 
     candidates: list[Candidate] = []
     excluded: list[Excluded] = []
@@ -283,7 +284,7 @@ def rank(
             continue
 
         components = Components(
-            fairness=normalised_debt(debts[person.id], spread),
+            fairness=normalised_debt(debts[person.id], scale),
             fit=_fit_score(person, duty, roster),
             responsiveness=_responsiveness_score(record),
             notice=_notice_score(duty, eligibility, moment),

@@ -11,6 +11,7 @@ from zamu.core.fairness import (
     ask_budget_remaining,
     build_records,
     cohort_mean_load,
+    debt_scale,
     describe_load,
     fairness_debt,
     normalised_debt,
@@ -198,3 +199,33 @@ def test_cohort_mean_ignores_people_outside_the_cohort():
     records = build_records(roster, f.NOW)
     assert cohort_mean_load(records, roster.org, {f.MARCUS.id}) == 0.0
     assert cohort_mean_load(records, roster.org, {f.AMARA.id}) == pytest.approx(4.0)
+
+
+def test_one_heavy_carrier_does_not_flatten_everybody_else():
+    """The bug this scale exists to prevent.
+
+    With a max-based normaliser, a single person carrying far more than the rest
+    stretches the denominator until ordinary differences collapse toward 0.5, fairness
+    stops discriminating, and the lighter components decide the order. A lopsided
+    roster is exactly the situation Zamu is for, so fairness has to keep working there.
+    """
+    lopsided = [40.0, -3.0, -10.0, -12.0]  # one outlier, three ordinary candidates
+    scale = debt_scale(lopsided)
+
+    ordinary = [normalised_debt(d, scale) for d in lopsided[1:]]
+    assert max(ordinary) - min(ordinary) > 0.15
+
+    # A max-based scale would have squashed the same three into near-indistinguishable.
+    max_scale = max(abs(d) for d in lopsided)
+    squashed = [normalised_debt(d, max_scale) for d in lopsided[1:]]
+    assert max(squashed) - min(squashed) < 0.12
+
+
+def test_the_scale_is_zero_when_everybody_matches():
+    assert debt_scale([0.0, 0.0, 0.0]) == 0.0
+    assert debt_scale([]) == 0.0
+    assert normalised_debt(0.0, 0.0) == 0.5
+
+
+def test_the_scale_grows_with_the_spread():
+    assert debt_scale([-1.0, 1.0]) < debt_scale([-10.0, 10.0])
