@@ -19,6 +19,7 @@ from typing import Any
 from zamu.core.authority import ProposedAction, authorize, granted_levels
 from zamu.core.clock import Clock
 from zamu.core.coverage import CoverageAssessment, assess_duty, gaps
+from zamu.core.eligibility import next_contactable_moment
 from zamu.core.errors import NotFound
 from zamu.core.ids import (
     ask_idempotency_key,
@@ -28,7 +29,7 @@ from zamu.core.ids import (
     new_token,
 )
 from zamu.core.ledger import Ledger
-from zamu.core.messages import compose_ask, compose_draft_note
+from zamu.core.messages import compose_ask, compose_draft_note, format_when_moment
 from zamu.core.models import (
     ActionClass,
     ActionResult,
@@ -66,6 +67,12 @@ class Outcome(StrEnum):
     FAILED = "failed"
     REPLAYED = "replayed"
     """This exact action was already performed. Nothing was done a second time."""
+
+    WITHDRAWN = "withdrawn"
+    """A person was released from a duty they were on, leaving a gap to fill."""
+
+    DEFERRED = "deferred"
+    """The right person was found but it is the middle of their night. Zamu waits."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -287,10 +294,28 @@ class CoverageService:
         if decision.allowed:
             return self._send_ask(roster, duty, person, candidate, decision.rule, excluded)
 
-        # Sending was refused. Record that plainly, then try the lesser action.
+        # Sending was refused. Record that plainly, then decide what less to do.
         self._ledger.record_blocked(
             send_action, decision, idempotency_key("blocked_send", duty_id, person.id)
         )
+
+        # Quiet hours are a timing constraint, not a permission problem. Dropping to a
+        # draft here would hand the coordinator work at 2am that Zamu will be able to
+        # do itself at 8am, and would contradict what the refusal actually says.
+        if decision.rule == "R7-quiet-hours":
+            contactable = next_contactable_moment(person, now)
+            return AskOutcome(
+                Outcome.DEFERRED,
+                duty_id,
+                f"{decision.reason} Zamu will ask at "
+                f"{format_when_moment(contactable, roster.org.timezone)}.",
+                person_id=person.id,
+                person_name=person.name,
+                rationale=candidate.rationale,
+                policy_rule=decision.rule,
+                expires_at=contactable,
+                excluded=excluded,
+            )
 
         draft_action = replace(
             send_action,
@@ -658,6 +683,118 @@ class CoverageService:
                 continue
             if other.state.is_open:
                 self.store.put_ask(replace(other, state=AskState.SUPERSEDED, responded_at=now))
+
+    # -- withdrawing -------------------------------------------------------------------
+
+    def record_withdrawal(
+        self, org_id: str, duty_id: str, person_id: str, evidence: str
+    ) -> AskOutcome:
+        """Take a person off a duty they can no longer do, and prove the roster changed.
+
+        This is the event that starts almost every fill. It is a roster write like any
+        other — gated, receipted, and verified by re-read — because "Priya dropped out"
+        is exactly the kind of claim that is easy to act on and hard to undo.
+        """
+        now = self.clock.now()
+        roster = self.roster(org_id)
+        duty = self._require_duty(roster, duty_id)
+        person = roster.person(person_id)
+        name = person.name if person else person_id
+
+        key = idempotency_key("withdraw", duty_id, person_id, str(evidence)[:120])
+        action = ProposedAction(
+            org_id=org_id,
+            action_class=ActionClass.WRITE_ROSTER,
+            summary=f"Take {name} off {duty.title}",
+            person_id=person_id,
+            duty_id=duty_id,
+            payload={"kind": "withdraw", "evidence": evidence, "idempotency_key": key},
+        )
+        decision = authorize(action, roster, now)
+
+        if not decision.allowed:
+            record = self._ledger.record_blocked(action, decision, key)
+            return AskOutcome(
+                Outcome.BLOCKED,
+                duty_id,
+                decision.reason,
+                person_id=person_id,
+                person_name=name,
+                action_id=record.id,
+                policy_rule=decision.rule,
+                needs_coordinator=True,
+            )
+
+        intended = {"duty_id": duty_id, "assigned_person_id": None}
+        entry = self._ledger.begin(action, decision, intended, key)
+        if entry.replayed:
+            return AskOutcome(
+                Outcome.REPLAYED,
+                duty_id,
+                f"{name} was already taken off {duty.title}.",
+                person_id=person_id,
+                person_name=name,
+                action_id=entry.record.id,
+                policy_rule=entry.record.policy_rule,
+            )
+
+        self.store.put_duty(duty.vacated())
+        executed = self._ledger.mark_executed(entry.record)
+
+        reread = self.store.get_duty(org_id, duty_id)
+        observed = (
+            {"duty_id": reread.id, "assigned_person_id": reread.assigned_person_id}
+            if reread is not None
+            else None
+        )
+        closed = self._ledger.close(executed, observed)
+
+        # Any open ask about this duty was about the old arrangement.
+        for ask in self.store.list_asks(org_id):
+            if ask.duty_id == duty_id and ask.state.is_open:
+                self.store.put_ask(replace(ask, state=AskState.SUPERSEDED, responded_at=now))
+
+        # Record the withdrawal as a declined ask, so the person who just dropped this
+        # shift is not immediately invited to cover it. Without this, the very first
+        # thing Zamu does after Priya withdraws is email Priya about Priya's shift.
+        self.store.put_ask(
+            Ask(
+                id=new_id("ask"),
+                org_id=org_id,
+                duty_id=duty_id,
+                person_id=person_id,
+                sent_at=now,
+                expires_at=now,
+                channel=Channel.WEB,
+                state=AskState.WITHDRAWN,
+                token="",
+                rationale=f"Withdrew from this duty: {evidence}",
+                responded_at=now,
+                drafted_only=True,
+            )
+        )
+
+        if closed.result is not ActionResult.VERIFIED:
+            return AskOutcome(
+                Outcome.FAILED,
+                duty_id,
+                f"Could not confirm {name} was taken off {duty.title}. {closed.detail}",
+                person_id=person_id,
+                person_name=name,
+                action_id=closed.id,
+                policy_rule=decision.rule,
+                needs_coordinator=True,
+            )
+
+        return AskOutcome(
+            Outcome.WITHDRAWN,
+            duty_id,
+            f"{name} is off {duty.title}, confirmed on the roster. It is now uncovered.",
+            person_id=person_id,
+            person_name=name,
+            action_id=closed.id,
+            policy_rule=decision.rule,
+        )
 
     # -- sweeping ----------------------------------------------------------------------
 

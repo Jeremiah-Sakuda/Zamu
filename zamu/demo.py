@@ -50,6 +50,24 @@ def _at(base: datetime, days: int, hour: int, minute: int = 0) -> datetime:
     )
 
 
+SATURDAY = 5
+
+
+def _saturday_offset(base: datetime, weeks: int) -> int:
+    """Day offset from `base` to a Saturday, `weeks` weeks away.
+
+    The demo is built relative to whenever it is seeded, so a shift called "Saturday
+    intake" has to actually land on a Saturday. Nothing undermines a roster demo
+    faster than a Saturday shift on a Tuesday.
+    """
+    tz = ZoneInfo(DEMO_TZ)
+    today = base.astimezone(tz).date()
+    ahead = (SATURDAY - today.weekday()) % 7
+    if weeks >= 0:
+        return ahead + 7 * weeks if ahead or weeks else 7
+    return ahead - 7 * (abs(weeks))
+
+
 def _id(prefix: str, name: str) -> str:
     return seeded_id(prefix, DEMO_ORG_ID, name)
 
@@ -64,7 +82,13 @@ def demo_org() -> Org:
 
 
 def demo_people() -> tuple[Person, ...]:
-    """Six volunteers, each embodying one thing coverage software usually gets wrong."""
+    """Six volunteers, each embodying one thing coverage software usually gets wrong.
+
+    Quiet hours are off in the sandbox. They are a real feature, exercised throughout
+    the test suite, but a public demo that refuses to do anything between 9pm and 8am
+    cannot be driven by a judge in another timezone — and an agent that sits on its
+    hands is indistinguishable from one that is broken.
+    """
 
     def make(
         name: str,
@@ -81,7 +105,7 @@ def demo_people() -> tuple[Person, ...]:
             name=name,
             email=f"{handle}@riverside.example",
             qualifications=frozenset(quals),
-            quiet_hours=quiet or QuietHours(start=time(21, 0), end=time(8, 0)),
+            quiet_hours=quiet or QuietHours(enabled=False),
             timezone=DEMO_TZ,
             opt_ins=frozenset({ActionClass.SEND_ASK}) if opted_in else frozenset(),
             active=active,
@@ -159,7 +183,7 @@ def demo_duties(people: tuple[Person, ...], now: datetime) -> tuple[Duty, ...]:
         )
         add(
             f"past-amara-sat-{week}",
-            -7 * week + 2,
+            _saturday_offset(now, -week),
             8,
             5.0,
             "Intake",
@@ -195,8 +219,8 @@ def demo_duties(people: tuple[Person, ...], now: datetime) -> tuple[Duty, ...]:
 
     add("next-late", 1, 20, 2.0, "Distribution", FOOD_SAFETY, devon, title="Closing shift",
         confirmed_days_ago=2)
-    add("saturday-intake", 3, 8, 5.0, "Intake", FOOD_SAFETY, amara, title="Saturday intake",
-        confirmed_days_ago=3)
+    add("saturday-intake", _saturday_offset(now, 0), 8, 5.0, "Intake", FOOD_SAFETY, amara,
+        title="Saturday intake", confirmed_days_ago=3)
 
     # Accepted three weeks ago and never reconfirmed: honestly at risk, not covered.
     stale_start = _at(now, 5, 9)
@@ -217,7 +241,8 @@ def demo_duties(people: tuple[Person, ...], now: datetime) -> tuple[Duty, ...]:
     )
 
     # A second open gap next week, so the console shows more than one thing to do.
-    add("next-week-intake", 8, 8, 5.0, "Intake", FOOD_SAFETY, None, title="Saturday intake")
+    add("next-week-intake", _saturday_offset(now, 1), 8, 5.0, "Intake", FOOD_SAFETY, None,
+        title="Saturday intake")
 
     return tuple(duties)
 
@@ -255,6 +280,37 @@ def demo_asks(
             responded_at=now - timedelta(days=20, hours=-2),
             rationale="Devon Reyes was trained and rested.",
         ),
+    )
+
+
+def demo_withdrawal(
+    people: tuple[Person, ...], duties: tuple[Duty, ...], now: datetime
+) -> Ask:
+    """Priya's withdrawal, recorded as a declined ask.
+
+    This is the event the whole demo starts from. Recording it this way is not a
+    presentation trick: it is exactly what `record_withdrawal` writes, and it is what
+    keeps Zamu from cheerfully emailing Priya about the shift Priya just dropped.
+    """
+    priya = next(p for p in people if p.name.startswith("Priya"))
+    gap = next(d for d in duties if d.id == _id("dut", "thursday-gap"))
+    withdrew_at = now - timedelta(hours=3)
+    return Ask(
+        id=_id("ask", "priya-withdrawal"),
+        org_id=DEMO_ORG_ID,
+        duty_id=gap.id,
+        person_id=priya.id,
+        sent_at=withdrew_at,
+        expires_at=withdrew_at,
+        channel=Channel.WEB,
+        state=AskState.WITHDRAWN,
+        token="",
+        rationale=(
+            "Withdrew from this duty: \"So sorry, I can't make Thursday evening after "
+            "all — my shift at work got moved.\""
+        ),
+        responded_at=withdrew_at,
+        drafted_only=True,
     )
 
 
@@ -313,6 +369,7 @@ def seed(store: Store, now: datetime, *, send: bool = True, write: bool = True) 
         store.put_duty(duty)
     for ask in demo_asks(people, duties, moment):
         store.put_ask(ask)
+    store.put_ask(demo_withdrawal(people, duties, moment))
     for grant in demo_grants(moment, send=send, write=write):
         store.put_grant(grant)
 

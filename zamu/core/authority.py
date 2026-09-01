@@ -239,7 +239,15 @@ def _authorize_send(
 def _authorize_write(
     action: ProposedAction, roster: Roster, grant: Grant, now: datetime
 ) -> Decision:
-    """A roster write is only ever justified by an acceptance that already happened."""
+    """Roster writes come in two shapes and each needs its own justification.
+
+    Adding somebody to a duty needs their explicit acceptance. Taking somebody off a
+    duty needs them to be the person currently on it — a withdrawal is a person
+    releasing their own commitment, and Zamu will not release anybody else's.
+    """
+    if action.payload.get("kind") == "withdraw":
+        return _authorize_withdrawal(action, roster, grant)
+
     ask_id = action.payload.get("ask_id")
     if not ask_id:
         return Decision(
@@ -302,5 +310,65 @@ def _authorize_write(
         action.action_class,
         "R10-explicit-acceptance",
         "This write is backed by a recorded acceptance from the person being assigned.",
+        grant.id,
+    )
+
+
+def _authorize_withdrawal(action: ProposedAction, roster: Roster, grant: Grant) -> Decision:
+    """Vacating a duty on behalf of the person who is on it."""
+    duty = roster.duty(action.duty_id) if action.duty_id else None
+    if duty is None:
+        return Decision(
+            False,
+            action.action_class,
+            "R13-unknown-duty",
+            "Zamu cannot withdraw somebody from a duty that does not exist.",
+            grant.id,
+        )
+
+    if duty.assigned_person_id is None:
+        return Decision(
+            False,
+            action.action_class,
+            "R13-nobody-assigned",
+            f"Nobody is assigned to {duty.title}, so there is nothing to withdraw from.",
+            grant.id,
+        )
+
+    if duty.assigned_person_id != action.person_id:
+        holder = roster.person(duty.assigned_person_id)
+        name = holder.name if holder else duty.assigned_person_id
+        return Decision(
+            False,
+            action.action_class,
+            "R13-not-their-duty",
+            f"{name} is on that duty, not the person this withdrawal names. "
+            "Zamu only ever releases somebody from their own commitment.",
+            grant.id,
+        )
+
+    if not str(action.payload.get("evidence", "")).strip():
+        return Decision(
+            False,
+            action.action_class,
+            "R13-no-evidence",
+            "Zamu will not remove somebody from a shift without recording what they said.",
+            grant.id,
+        )
+
+    if not action.payload.get("idempotency_key"):
+        return Decision(
+            False,
+            action.action_class,
+            "R12-no-idempotency-key",
+            "Zamu will not perform an unrepeatable write without an idempotency key.",
+            grant.id,
+        )
+
+    return Decision(
+        True,
+        action.action_class,
+        "R13-self-withdrawal",
+        "This withdrawal releases the person who is actually on the duty.",
         grant.id,
     )

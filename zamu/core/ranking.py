@@ -43,6 +43,21 @@ NOTICE_SATURATION = timedelta(hours=72)
 REST_SATURATION = timedelta(days=14)
 #: Number of past duties in the same role after which familiarity is maxed out.
 FAMILIARITY_SATURATION = 3
+#: How much of the fit score familiarity may account for.
+#:
+#: Kept deliberately small. Familiarity points at whoever has done the role most, which
+#: is precisely the person fairness is trying to protect, so it belongs in the ranking
+#: as a tiebreak and not as a driver. At 0.4 it was strong enough to overturn a two-hour
+#: fairness gap, which is the incumbent behaviour this product exists to replace.
+FAMILIARITY_SHARE = 0.2
+
+#: Pseudo-observations of average behaviour mixed into every response history.
+#:
+#: One accepted ask is not a reputation. Without this, a volunteer who has been asked
+#: once and said yes scores a perfect 1.0 and outranks somebody who has never been
+#: asked at all — which is exactly how new volunteers stay invisible and then leave.
+RESPONSE_PRIOR_STRENGTH = 3.0
+RESPONSE_PRIOR_MEAN = 0.5
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,19 +147,32 @@ def _fit_score(person: Person, duty: Duty, roster: Roster) -> float:
         1 for d in roster.duties_for(person.id) if d.role == duty.role and d.id != duty.id
     )
     familiarity = _clamp(past_same_role / FAMILIARITY_SATURATION)
-    return _clamp(0.6 * qualified + 0.4 * familiarity)
+    return _clamp((1.0 - FAMILIARITY_SHARE) * qualified + FAMILIARITY_SHARE * familiarity)
+
+
+def _shrink(successes: float, trials: float) -> float:
+    """A rate regressed toward 0.5 in proportion to how little evidence there is.
+
+    With no history this returns exactly 0.5; with one success it returns 0.625, not
+    1.0; and it converges on the observed rate as the record grows. This is the
+    difference between "reliable" and "has answered the phone once".
+    """
+    return (successes + RESPONSE_PRIOR_STRENGTH * RESPONSE_PRIOR_MEAN) / (
+        trials + RESPONSE_PRIOR_STRENGTH
+    )
 
 
 def _responsiveness_score(record: FairnessRecord) -> float:
     """How reliably this person answers when asked.
 
-    Someone who has never been asked scores neutral rather than badly. Penalising
-    an absence of history is how new volunteers stay invisible and then leave.
+    Someone who has never been asked scores neutral rather than badly. Penalising an
+    absence of history is how new volunteers stay invisible and then leave — and so,
+    just as surely, is treating a single yes as proof of dependability.
     """
-    acceptance = record.acceptance_rate
-    response = record.response_rate
-    if acceptance is None or response is None:
+    if record.asks_sent == 0:
         return 0.5
+    acceptance = _shrink(record.accepts, record.responses)
+    response = _shrink(record.responses, record.asks_sent)
     return _clamp(0.6 * acceptance + 0.4 * response)
 
 
@@ -198,8 +226,8 @@ def _rationale(person: Person, duty: Duty, components: Components, load_summary:
     if not clauses:
         clauses.append("is eligible and available")
 
-    first, *rest = clauses
-    body = first if not rest else f"{first} and {', '.join(rest)}"
+    head, tail = clauses[:-1], clauses[-1]
+    body = f"{', '.join(head)} and {tail}" if head else tail
     return f"{person.name} {body}."
 
 
