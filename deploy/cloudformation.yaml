@@ -174,6 +174,42 @@ Resources:
               Zamu completed. Most days it sends nothing.
             Input: !Sub '{"job": "brief", "to": "${CoordinatorEmail}"}'
 
+  # ---------------------------------------------------------------- inbound mail
+  InboundFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: >
+        Reads volunteers' replies. An inbound email is untrusted input with write
+        access behind it, so the sender is resolved against the roster before any
+        interpretation happens, the body is fenced as data, and whatever is concluded
+        still has to pass the authority gate.
+      CodeUri: ../
+      Handler: zamu.infra.inbound.handler
+      Timeout: 60
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref RosterTable }
+        - Statement:
+            - Effect: Allow
+              Action: [bedrock:InvokeModel]
+              Resource: "*"
+        - !If
+          - HasSes
+          - Statement:
+              - Effect: Allow
+                Action: [ses:SendEmail]
+                Resource: "*"
+          - !Ref AWS::NoValue
+      Events:
+        Replies:
+          Type: SNS
+          Properties:
+            Topic: !Ref InboundTopic
+
+  InboundTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Zamu inbound volunteer replies
+
   ApiLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -199,3 +235,9 @@ Outputs:
   ScheduledFunctionName:
     Description: Invoke directly to run a job on demand.
     Value: !Ref ScheduledFunction
+
+  InboundTopicArn:
+    Description: >
+      Point an SES receipt rule at this topic to let volunteers reply in their own
+      words instead of tapping a link.
+    Value: !Ref InboundTopic
