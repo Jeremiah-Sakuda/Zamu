@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import uuid
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
@@ -82,7 +82,7 @@ class OutboxNotifier:
 
     def _write(self, message: Message, delivery: Delivery) -> None:
         self.directory.mkdir(parents=True, exist_ok=True)
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+        stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
         path = self.directory / f"{stamp}-{delivery.provider_id}.json"
         path.write_text(
             json.dumps({"message": asdict(message), "delivery": asdict(delivery)}, indent=2),

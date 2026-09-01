@@ -220,7 +220,9 @@ def test_idempotency_keys_collide_only_for_the_same_logical_action():
     assert a == assignment_idempotency_key("dut_1", "per_1", "ask_1")
     assert a != assignment_idempotency_key("dut_1", "per_2", "ask_1")
 
-    window = f.NOW
-    b = ask_idempotency_key("dut_1", "per_1", window)
-    assert b == ask_idempotency_key("dut_1", "per_1", window)
-    assert b != ask_idempotency_key("dut_1", "per_1", window + timedelta(hours=6))
+    # An ask key is not time-scoped: one person is asked about one duty at most once,
+    # so a retry an hour later must collide rather than produce a second question.
+    b = ask_idempotency_key("dut_1", "per_1")
+    assert b == ask_idempotency_key("dut_1", "per_1")
+    assert b != ask_idempotency_key("dut_1", "per_2")
+    assert b != ask_idempotency_key("dut_2", "per_1")

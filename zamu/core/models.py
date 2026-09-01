@@ -119,6 +119,7 @@ class DisqualifyingReason(StrEnum):
     INSUFFICIENT_NOTICE = "insufficient_notice"
     ALREADY_ASSIGNED = "already_assigned"
     DECLINED_THIS_DUTY = "declined_this_duty"
+    ALREADY_ASKED_THIS_DUTY = "already_asked_this_duty"
     ASK_BUDGET_EXHAUSTED = "ask_budget_exhausted"
     OPEN_ASK_ELSEWHERE = "open_ask_elsewhere"
     NOT_OPTED_IN = "not_opted_in"
@@ -133,6 +134,7 @@ REASON_SENTENCES: dict[DisqualifyingReason, str] = {
     DisqualifyingReason.INSUFFICIENT_NOTICE: "would get less notice than this duty requires",
     DisqualifyingReason.ALREADY_ASSIGNED: "is already assigned to this duty",
     DisqualifyingReason.DECLINED_THIS_DUTY: "already declined this duty",
+    DisqualifyingReason.ALREADY_ASKED_THIS_DUTY: "has already been asked about this duty",
     DisqualifyingReason.ASK_BUDGET_EXHAUSTED: "has already been asked as often as allowed",
     DisqualifyingReason.OPEN_ASK_ELSEWHERE: "has an unanswered ask open right now",
     DisqualifyingReason.NOT_OPTED_IN: "has not opted in to being contacted directly",

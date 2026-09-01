@@ -107,7 +107,8 @@ You are receiving this because you opted in to shift requests. Reply STOP to opt
  font-size:16px;line-height:1.5;color:#020617;max-width:520px">
   <p>Hi {person.name.split()[0]},</p>
   <p>{org.name} has an uncovered shift and you are the fairest person to ask.</p>
-  <div style="border:1px solid #E2E8F0;border-radius:12px;padding:16px;background:#F8FAFC;margin:16px 0">
+  <div style="border:1px solid #E2E8F0;border-radius:12px;padding:16px;
+   background:#F8FAFC;margin:16px 0">
     <div style="font-weight:700;font-size:18px">{duty.title}</div>
     <div style="color:#475569;margin-top:4px">{when} ({soon})</div>
     <div style="color:#475569">Role: {duty.role}</div>

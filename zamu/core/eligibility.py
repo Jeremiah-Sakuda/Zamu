@@ -131,9 +131,16 @@ def evaluate(
     elif contactable_from > notice_deadline:
         reasons.append(DisqualifyingReason.QUIET_HOURS_BLOCK_NOTICE)
 
+    # One ask per person per duty, ever. Asking somebody a second time about a shift
+    # they already ignored or turned down is how an agent becomes the group chat.
     for ask in roster.asks_for_person(person.id):
-        if ask.duty_id == duty.id and ask.state in (AskState.DECLINED, AskState.WITHDRAWN):
+        if ask.duty_id != duty.id:
+            continue
+        if ask.state in (AskState.DECLINED, AskState.WITHDRAWN):
             reasons.append(DisqualifyingReason.DECLINED_THIS_DUTY)
+            break
+        if ask.state in (AskState.SENT, AskState.EXPIRED):
+            reasons.append(DisqualifyingReason.ALREADY_ASKED_THIS_DUTY)
             break
 
     for ask in roster.asks_for_person(person.id):

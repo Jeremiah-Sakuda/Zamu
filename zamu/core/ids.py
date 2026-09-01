@@ -9,7 +9,6 @@ from __future__ import annotations
 import hashlib
 import secrets
 import string
-from datetime import datetime
 
 _ALPHABET = string.ascii_lowercase + string.digits
 
@@ -47,9 +46,14 @@ def idempotency_key(action: str, *parts: str) -> str:
     return seeded_id(f"idem_{action}", *parts, length=16)
 
 
-def ask_idempotency_key(duty_id: str, person_id: str, attempt_window_start: datetime) -> str:
-    """Idempotency for a single ask: this duty, this person, this attempt window."""
-    return idempotency_key("ask", duty_id, person_id, attempt_window_start.isoformat())
+def ask_idempotency_key(duty_id: str, person_id: str) -> str:
+    """Idempotency for a single ask.
+
+    Deliberately not time-scoped: Zamu asks any given person about any given duty at
+    most once, ever, so the pair alone is the identity of the action. A time-windowed
+    key would let a retry loop legitimately re-ask somebody who already said nothing.
+    """
+    return idempotency_key("ask", duty_id, person_id)
 
 
 def assignment_idempotency_key(duty_id: str, person_id: str, ask_id: str) -> str:
