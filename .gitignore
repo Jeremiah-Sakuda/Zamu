@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Node
+node_modules/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+
+# Local state
+*.sqlite
+*.sqlite3
+.zamu/
+outbox/
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+.aws/
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Vendored design skill (installed, not committed)
+.claude/skills/ui-ux-pro-max/
+.claude/skills/ui-styling/
