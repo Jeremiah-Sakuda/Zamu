@@ -225,6 +225,19 @@ export interface AgentRun {
   refusals: { tool: string; rule: string; reason: string }[];
 }
 
+export interface ImportReport {
+  imported_people: number;
+  imported_duties: number;
+  skipped_rows: number;
+  problems: string[];
+  summary: string;
+  dry_run: boolean;
+  preview: {
+    people: { name: string; email: string }[];
+    duties: { title: string; starts_at: string }[];
+  };
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     cache: "no-store",
@@ -269,4 +282,11 @@ export const api = {
       body: JSON.stringify({ message }),
     }),
   resetDemo: () => request<{ reset: boolean }>(`/api/demo/reset`, { method: "POST" }),
+  createOrg: (name: string, timezone: string) =>
+    request<Org>(`/api/orgs`, { method: "POST", body: JSON.stringify({ name, timezone }) }),
+  importCsv: (org: string, what: "people" | "duties", csv: string, dryRun: boolean) =>
+    request<ImportReport>(`/api/orgs/${org}/import/${what}`, {
+      method: "POST",
+      body: JSON.stringify({ csv, dry_run: dryRun }),
+    }),
 };

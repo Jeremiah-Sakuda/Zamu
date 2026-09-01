@@ -12,10 +12,12 @@ import { Button } from "./ui";
  * behind it is a rumour that has been written to a database.
  */
 export function WithdrawDialog({
+  orgId,
   duty,
   onClose,
   onDone,
 }: {
+  orgId: string;
   duty: Duty;
   onClose: () => void;
   onDone: (result: AskResult) => void;
@@ -39,7 +41,7 @@ export function WithdrawDialog({
     setBusy(true);
     setError(null);
     try {
-      onDone(await api.withdraw(duty.id, duty.assigned.id, evidence.trim()));
+      onDone(await api.withdraw(duty.id, duty.assigned.id, evidence.trim(), orgId));
     } catch (e) {
       setError((e as Error).message);
       setBusy(false);

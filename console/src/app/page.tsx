@@ -1,9 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   api,
   type AskResult,
+  DEMO_ORG,
   type Console,
   type Duty,
   type OutboxMessage,
@@ -40,6 +43,17 @@ const TABS = [
 type TabKey = (typeof TABS)[number]["key"];
 
 export default function ConsolePage() {
+  return (
+    <Suspense fallback={null}>
+      <Coordinator />
+    </Suspense>
+  );
+}
+
+function Coordinator() {
+  // An org in the query string wins over the one baked in at build time, so the setup
+  // flow can hand somebody straight into the roster they just created.
+  const orgId = useSearchParams().get("org") ?? DEMO_ORG;
   const [data, setData] = useState<Console | null>(null);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [outbox, setOutbox] = useState<OutboxMessage[]>([]);
@@ -53,9 +67,9 @@ export default function ConsolePage() {
   const refresh = useCallback(async () => {
     try {
       const [consoleData, receiptData, outboxData] = await Promise.all([
-        api.console(),
-        api.receipts(),
-        api.outbox(),
+        api.console(orgId),
+        api.receipts(orgId),
+        api.outbox(orgId),
       ]);
       setData(consoleData);
       setReceipts(receiptData);
@@ -64,7 +78,7 @@ export default function ConsolePage() {
     } catch (e) {
       setError((e as Error).message);
     }
-  }, []);
+  }, [orgId]);
 
   useEffect(() => {
     void refresh();
@@ -113,9 +127,15 @@ export default function ConsolePage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="secondary" onClick={() => act(() => api.sweep())} busy={busy}>
+            <Button variant="secondary" onClick={() => act(() => api.sweep(orgId))} busy={busy}>
               Run a sweep
             </Button>
+            <Link
+              href="/setup"
+              className="inline-flex min-h-11 items-center rounded-lg border-2 border-transparent px-3 py-2 text-sm font-bold text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground"
+            >
+              Set up a roster
+            </Link>
             {org.demo ? (
               <Button
                 variant="quiet"
@@ -196,6 +216,7 @@ export default function ConsolePage() {
 
             {selected ? (
               <CandidatePanel
+                orgId={orgId}
                 dutyId={selected}
                 onClose={() => setSelected(null)}
                 onActed={(result) => {
@@ -218,6 +239,7 @@ export default function ConsolePage() {
             {tab === "people" ? <PeopleLedger people={people} org={org} /> : null}
             {tab === "authority" ? (
               <AuthorityLadder
+                orgId={orgId}
                 grants={grants}
                 onChanged={(next) => {
                   setData({ ...data, grants: next });
@@ -238,6 +260,7 @@ export default function ConsolePage() {
 
       {withdrawing ? (
         <WithdrawDialog
+          orgId={orgId}
           duty={withdrawing}
           onClose={() => setWithdrawing(null)}
           onDone={(result) => {

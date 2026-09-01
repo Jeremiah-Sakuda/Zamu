@@ -12,10 +12,12 @@ import { ArrowIcon, Button, Card, Empty, Meter, Rule, SpinnerIcon } from "./ui";
  * interface that cannot answer it will not be trusted with the next decision.
  */
 export function CandidatePanel({
+  orgId,
   dutyId,
   onClose,
   onActed,
 }: {
+  orgId: string;
   dutyId: string;
   onClose: () => void;
   onActed: (result: AskResult) => void;
@@ -29,18 +31,18 @@ export function CandidatePanel({
     setOrder(null);
     setError(null);
     api
-      .candidates(dutyId)
+      .candidates(dutyId, orgId)
       .then((data) => live && setOrder(data))
       .catch((e: Error) => live && setError(e.message));
     return () => {
       live = false;
     };
-  }, [dutyId]);
+  }, [dutyId, orgId]);
 
   async function ask() {
     setAsking(true);
     try {
-      onActed(await api.ask(dutyId));
+      onActed(await api.ask(dutyId, orgId));
     } catch (e) {
       setError((e as Error).message);
     } finally {

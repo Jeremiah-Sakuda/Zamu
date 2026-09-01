@@ -196,6 +196,9 @@ setup they cannot finish in one sitting. So it takes the spreadsheet they alread
 .venv/bin/zamu --org <org-id> import people volunteers.csv
 ```
 
+Or do the whole thing in the console at **`/setup`** — three steps, paste two CSV
+exports, and it hands you straight into the roster you just made.
+
 Column names are matched loosely, because real spreadsheets say *Name*, *Full Name*,
 *Volunteer*, and `name ` with a trailing space. Bad rows do not reject the file — they
 are imported around and reported by line number, so a coordinator fixes four lines
@@ -239,6 +242,7 @@ docker compose -f deploy/compose.yaml up --build
 | **Fairness** | Who has actually carried what. One bar per person against the heaviest carrier: the shape of the distribution is the point, not anybody's total. |
 | **Authority** | Five rungs of the trust ladder, including the one that is permanently unreachable, so the boundary is visible rather than promised. |
 | **Receipts** | Intended and observed, side by side, with the rule. That adjacency *is* the receipt. |
+| **Set up** | Name the organization, paste your two spreadsheet exports, done. Bad rows are imported around and named by line number. |
 | **Sent** | The volunteer's inbox. In the sandbox the one-tap links are live, so one person can drive the whole loop. |
 
 ## The trust ladder

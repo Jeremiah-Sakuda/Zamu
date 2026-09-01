@@ -14,9 +14,11 @@ import { Card, CheckIcon, LockIcon, SpinnerIcon } from "./ui";
  * the boundary rather than having to trust a promise it exists.
  */
 export function AuthorityLadder({
+  orgId,
   grants,
   onChanged,
 }: {
+  orgId: string;
   grants: Grant[];
   onChanged: (grants: Grant[]) => void;
 }) {
@@ -27,7 +29,7 @@ export function AuthorityLadder({
     setPending(grant.key);
     setError(null);
     try {
-      const body = await api.setGrant(grant.key, !grant.granted);
+      const body = await api.setGrant(grant.key, !grant.granted, orgId);
       onChanged(body.grants);
     } catch (e) {
       setError((e as Error).message);
