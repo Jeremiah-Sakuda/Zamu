@@ -69,9 +69,7 @@ def _zone(name: str) -> ZoneInfo:
 def active_grants(roster: Roster, now: datetime) -> tuple[Grant, ...]:
     """Grants currently in force for this org."""
     moment = utc(now)
-    return tuple(
-        g for g in roster.grants if g.org_id == roster.org.id and g.is_active(moment)
-    )
+    return tuple(g for g in roster.grants if g.org_id == roster.org.id and g.is_active(moment))
 
 
 def granted_levels(roster: Roster, now: datetime) -> frozenset[ActionClass]:
@@ -132,8 +130,13 @@ def authorize(action: ProposedAction, roster: Roster, now: datetime) -> Decision
     # R3 — every other action class needs a grant a human created.
     grant = find_grant(roster, action.action_class, action.person_id, moment)
     if grant is None:
-        scoped = find_grant(roster, action.action_class, None, moment)
-        if scoped is not None:
+        # Distinguish "no such grant" from "a grant exists but is scoped past this
+        # person". They look identical to the agent and completely different to the
+        # coordinator, who can fix the second one in a single click.
+        exists_for_class = any(
+            g.action_class is action.action_class for g in active_grants(roster, moment)
+        )
+        if exists_for_class:
             return Decision(
                 False,
                 action.action_class,

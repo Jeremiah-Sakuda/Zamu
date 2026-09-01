@@ -72,9 +72,11 @@ class Store(Protocol):
 class InMemoryStore:
     """Reference implementation. Fast, deterministic, and used by every unit test.
 
-    Entities are deep-copied on the way in and out. Zamu's models are frozen, but the
-    dicts inside `ActionRecord` are not, and a store that hands out live references
-    would let a caller silently rewrite a receipt after the fact.
+    Ledger entries are deep-copied on the way in *and* on the way out. Zamu's models
+    are frozen, but the `intended` and `observed` dicts inside an `ActionRecord` are
+    not, and a store that handed back live references would let a caller silently
+    rewrite a receipt after the fact — which would make the receipts worthless as
+    evidence, quietly and without any test noticing.
     """
 
     def __init__(self) -> None:
@@ -170,7 +172,7 @@ class InMemoryStore:
         self._actions[key] = stored
         self._action_order.append(key)
         self._keys[(stored.org_id, stored.idempotency_key)] = stored.id
-        return stored
+        return _clone_action(stored)
 
     def update_action(self, record: ActionRecord) -> ActionRecord:
         key = (record.org_id, record.id)
@@ -178,19 +180,21 @@ class InMemoryStore:
             raise NotFound(f"no action {record.id} in {record.org_id}")
         stored = _clone_action(record)
         self._actions[key] = stored
-        return stored
+        return _clone_action(stored)
 
     def get_action(self, org_id: str, action_id: str) -> ActionRecord | None:
-        return self._actions.get((org_id, action_id))
+        found = self._actions.get((org_id, action_id))
+        return _clone_action(found) if found is not None else None
 
     def find_action_by_key(self, org_id: str, idempotency_key: str) -> ActionRecord | None:
         action_id = self._keys.get((org_id, idempotency_key))
-        return self._actions.get((org_id, action_id)) if action_id else None
+        return self.get_action(org_id, action_id) if action_id else None
 
     def list_actions(self, org_id: str, limit: int | None = None) -> tuple[ActionRecord, ...]:
         rows = [self._actions[k] for k in self._action_order if k[0] == org_id]
         rows.reverse()
-        return tuple(rows[:limit] if limit is not None else rows)
+        selected = rows[:limit] if limit is not None else rows
+        return tuple(_clone_action(r) for r in selected)
 
     # -- composition -----------------------------------------------------------------
     def load_roster(self, org_id: str) -> Roster:

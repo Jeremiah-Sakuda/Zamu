@@ -242,9 +242,7 @@ def rank(
             continue
 
         if not eligibility.eligible:
-            excluded.append(
-                Excluded(person.id, person.name, eligibility.explain(person.name))
-            )
+            excluded.append(Excluded(person.id, person.name, eligibility.explain(person.name)))
             continue
 
         components = Components(

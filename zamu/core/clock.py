@@ -6,7 +6,7 @@ are untestable and the demo is unreproducible. So the clock is a parameter.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Protocol
 
 
@@ -20,7 +20,7 @@ class SystemClock:
     """Wall-clock time. Used in production."""
 
     def now(self) -> datetime:
-        return datetime.now(timezone.utc)
+        return datetime.now(UTC)
 
 
 class FixedClock:
@@ -45,7 +45,7 @@ class FixedClock:
 def _require_aware(value: datetime) -> datetime:
     if value.tzinfo is None:
         raise ValueError("Zamu refuses naive datetimes; pass a timezone-aware value")
-    return value.astimezone(timezone.utc)
+    return value.astimezone(UTC)
 
 
 def utc(value: datetime) -> datetime:

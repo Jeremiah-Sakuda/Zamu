@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from datetime import datetime, time, timedelta
-from enum import Enum, IntEnum
+from enum import IntEnum, StrEnum
 from typing import Any
 
 from zamu.core.clock import utc
@@ -18,7 +18,7 @@ from zamu.core.clock import utc
 # --------------------------------------------------------------------------------------
 
 
-class CoverageState(str, Enum):
+class CoverageState(StrEnum):
     """How confident we are that a duty will actually be performed by someone."""
 
     COVERED = "covered"
@@ -61,12 +61,10 @@ class ActionClass(IntEnum):
 
 
 #: Action classes Zamu will refuse to execute under any grant. Enforced in authority.py.
-FORBIDDEN_ACTION_CLASSES: frozenset[ActionClass] = frozenset(
-    {ActionClass.REASSIGN_WITHOUT_CONSENT}
-)
+FORBIDDEN_ACTION_CLASSES: frozenset[ActionClass] = frozenset({ActionClass.REASSIGN_WITHOUT_CONSENT})
 
 
-class AskState(str, Enum):
+class AskState(StrEnum):
     """Lifecycle of a single ask to a single person about a single duty."""
 
     SENT = "sent"
@@ -86,7 +84,7 @@ class AskState(str, Enum):
         return not self.is_open
 
 
-class ActionResult(str, Enum):
+class ActionResult(StrEnum):
     """What actually happened to an attempted action, after verification."""
 
     VERIFIED = "verified"
@@ -105,13 +103,13 @@ class ActionResult(str, Enum):
     """The write landed and was later undone by Zamu."""
 
 
-class Channel(str, Enum):
+class Channel(StrEnum):
     EMAIL = "email"
     WEB = "web"
     """The coordinator handed the volunteer a link directly. Needs no delivery provider."""
 
 
-class DisqualifyingReason(str, Enum):
+class DisqualifyingReason(StrEnum):
     """Why a person cannot take a duty. Each maps to one plain-English sentence."""
 
     INACTIVE = "inactive"
@@ -299,7 +297,9 @@ class Duty:
         return self.window.hours
 
     def assigned_to(self, person_id: str, at: datetime) -> Duty:
-        return replace(self, assigned_person_id=person_id, assigned_at=utc(at), confirmed_at=utc(at))
+        return replace(
+            self, assigned_person_id=person_id, assigned_at=utc(at), confirmed_at=utc(at)
+        )
 
     def vacated(self) -> Duty:
         return replace(self, assigned_person_id=None, assigned_at=None, confirmed_at=None)
@@ -467,7 +467,9 @@ class Roster:
         return self._duty_index.get(duty_id)
 
     def duties_for(self, person_id: str) -> tuple[Duty, ...]:
-        return tuple(d for d in self.duties if d.assigned_person_id == person_id and not d.cancelled)
+        return tuple(
+            d for d in self.duties if d.assigned_person_id == person_id and not d.cancelled
+        )
 
     def asks_for_duty(self, duty_id: str) -> tuple[Ask, ...]:
         return tuple(a for a in self.asks if a.duty_id == duty_id)

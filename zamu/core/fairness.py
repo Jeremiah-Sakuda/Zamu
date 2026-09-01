@@ -142,7 +142,9 @@ def build_records(roster: Roster, now: datetime) -> dict[str, FairnessRecord]:
     return records
 
 
-def cohort_mean_load(records: dict[str, FairnessRecord], org: Org, cohort: set[str] | None = None) -> float:
+def cohort_mean_load(
+    records: dict[str, FairnessRecord], org: Org, cohort: set[str] | None = None
+) -> float:
     """Average weighted load across the people being compared.
 
     The cohort is normally the eligible candidates for one duty, not the whole
@@ -150,7 +152,9 @@ def cohort_mean_load(records: dict[str, FairnessRecord], org: Org, cohort: set[s
     not fairness, it is noise.
     """
     ids = cohort if cohort is not None else set(records)
-    loads = [records[pid].weighted_load(org.unsociable_hour_weight) for pid in ids if pid in records]
+    loads = [
+        records[pid].weighted_load(org.unsociable_hour_weight) for pid in ids if pid in records
+    ]
     if not loads:
         return 0.0
     return sum(loads) / len(loads)

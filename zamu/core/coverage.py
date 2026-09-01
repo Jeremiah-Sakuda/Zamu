@@ -29,7 +29,9 @@ class CoverageAssessment:
         return self.state in (CoverageState.UNCOVERED, CoverageState.UNKNOWN)
 
 
-def assess_duty(duty: Duty, org: Org, now: datetime, roster: Roster | None = None) -> CoverageAssessment:
+def assess_duty(
+    duty: Duty, org: Org, now: datetime, roster: Roster | None = None
+) -> CoverageAssessment:
     """Work out the coverage state of a single duty.
 
     Order matters. Cancellation beats everything; an unassigned duty is uncovered;
@@ -93,7 +95,10 @@ def assess_duty(duty: Duty, org: Org, now: datetime, roster: Roster | None = Non
 
     name = person.name if person else "Someone"
     return CoverageAssessment(
-        duty.id, CoverageState.COVERED, f"{name} confirmed and is expected.", duty.assigned_person_id
+        duty.id,
+        CoverageState.COVERED,
+        f"{name} confirmed and is expected.",
+        duty.assigned_person_id,
     )
 
 
@@ -103,7 +108,9 @@ def assess_roster(roster: Roster, now: datetime) -> tuple[CoverageAssessment, ..
     return tuple(assess_duty(d, roster.org, now, roster) for d in ordered)
 
 
-def gaps(roster: Roster, now: datetime, horizon_days: int | None = None) -> tuple[CoverageAssessment, ...]:
+def gaps(
+    roster: Roster, now: datetime, horizon_days: int | None = None
+) -> tuple[CoverageAssessment, ...]:
     """Duties that need a human found for them, soonest first.
 
     Past duties are excluded: Zamu cannot fill yesterday, and pretending otherwise
@@ -117,9 +124,8 @@ def gaps(roster: Roster, now: datetime, horizon_days: int | None = None) -> tupl
         duty = roster.duty(assessment.duty_id)
         if duty is None or duty.cancelled or duty.start <= moment:
             continue
-        if horizon_days is not None:
-            if (duty.start - moment).days > horizon_days:
-                continue
+        if horizon_days is not None and (duty.start - moment).days > horizon_days:
+            continue
         out.append(assessment)
     return tuple(out)
 

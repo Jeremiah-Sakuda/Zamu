@@ -27,7 +27,9 @@ def seeded_id(prefix: str, *parts: str, length: int = 10) -> str:
     must always produce the same id.
     """
     digest = hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
-    body = "".join(_ALPHABET[int(digest[i : i + 2], 16) % len(_ALPHABET)] for i in range(0, length * 2, 2))
+    body = "".join(
+        _ALPHABET[int(digest[i : i + 2], 16) % len(_ALPHABET)] for i in range(0, length * 2, 2)
+    )
     return f"{prefix}_{body}"
 
 
