@@ -123,10 +123,9 @@ def test_sqlite_survives_a_reopen(tmp_path: Path):
 
 
 def test_the_idempotency_index_is_enforced_by_the_database(tmp_path: Path):
-    """Not merely by a prior read: two writers racing must still collide."""
-    import sqlite3
-
-    from zamu.core.models import ActionRecord
+    """Not merely by a prior read: two writers racing must still collide, and must do
+    so as a Conflict so every backing signals it the same way."""
+    from zamu.core.errors import Conflict
 
     db = SqliteStore(tmp_path / "idem.sqlite")
     try:
@@ -144,7 +143,7 @@ def test_the_idempotency_index_is_enforced_by_the_database(tmp_path: Path):
         db.append_action(record)
         from dataclasses import replace
 
-        with pytest.raises(sqlite3.IntegrityError):
+        with pytest.raises(Conflict):
             db.append_action(replace(record, id="act_two", summary="second"))
     finally:
         db.close()

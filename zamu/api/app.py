@@ -14,10 +14,8 @@ somebody's behalf would be the single most embarrassing possible bug.
 from __future__ import annotations
 
 import html
-import os
 from dataclasses import replace
 from datetime import timedelta
-from pathlib import Path
 from typing import Any
 
 from fastapi import Body, FastAPI, HTTPException, Query
@@ -26,23 +24,17 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 from zamu.api import views
 from zamu.api.pages import render_answered, render_confirm, render_notice
+from zamu.config import build_notifier, build_store, ensure_seeded, load_settings
 from zamu.core.brief import build_brief
 from zamu.core.clock import SystemClock
 from zamu.core.errors import NotFound, ZamuError
 from zamu.core.fill import CoverageService
 from zamu.core.ids import new_id
 from zamu.core.models import ActionClass, Grant
+from zamu.core.store import Store
 from zamu.demo import DEMO_ORG_ID, seed
-from zamu.infra.notify import OutboxNotifier
-from zamu.infra.sqlite_store import SqliteStore
 
-DB_PATH = os.environ.get("ZAMU_DB", ".zamu/zamu.sqlite")
-BASE_URL = os.environ.get("ZAMU_BASE_URL", "http://localhost:8000")
-ALLOWED_ORIGINS = [
-    o.strip()
-    for o in os.environ.get("ZAMU_CORS_ORIGINS", "http://localhost:3000").split(",")
-    if o.strip()
-]
+SETTINGS = load_settings()
 
 app = FastAPI(
     title="Zamu",
@@ -51,34 +43,36 @@ app = FastAPI(
 )
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
+    allow_origins=list(SETTINGS.cors_origins),
     allow_credentials=False,
     allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["*"],
 )
 
-_store: SqliteStore | None = None
-_notifier: OutboxNotifier | None = None
+_store: Store | None = None
+_notifier = None
 
 
-def get_store() -> SqliteStore:
+def get_store() -> Store:
+    """The process-wide store, seeded once if it is empty."""
     global _store
     if _store is None:
-        _store = SqliteStore(DB_PATH)
-        if not _store.list_orgs():
-            seed(_store, SystemClock().now())
+        _store = build_store(SETTINGS)
+        ensure_seeded(_store, SETTINGS)
     return _store
 
 
-def get_notifier() -> OutboxNotifier:
+def get_notifier():
     global _notifier
     if _notifier is None:
-        _notifier = OutboxNotifier(directory=Path(DB_PATH).parent / "outbox")
+        _notifier = build_notifier(SETTINGS)
     return _notifier
 
 
 def get_service() -> CoverageService:
-    return CoverageService(get_store(), SystemClock(), get_notifier(), base_url=BASE_URL)
+    return CoverageService(
+        get_store(), SystemClock(), get_notifier(), base_url=SETTINGS.base_url
+    )
 
 
 def _roster(org_id: str):
@@ -99,11 +93,13 @@ async def _zamu_error(_request, exc: ZamuError) -> JSONResponse:
 
 @app.get("/health")
 def health() -> dict[str, Any]:
+    """Liveness, plus which adapters are wired. Carries no secrets."""
     store = get_store()
     return {
         "status": "ok",
         "orgs": [o.id for o in store.list_orgs()],
         "demo_org": DEMO_ORG_ID,
+        "config": SETTINGS.describe(),
     }
 
 
@@ -179,7 +175,7 @@ def read_brief(org_id: str, hours: int = Query(24, ge=1, le=720)) -> dict[str, A
 @app.get("/api/orgs/{org_id}/outbox")
 def read_outbox(org_id: str) -> list[dict[str, Any]]:
     """The volunteer's inbox, so one person can drive the whole loop in the sandbox."""
-    return views.outbox_view(get_notifier(), _roster(org_id), BASE_URL)
+    return views.outbox_view(get_notifier(), _roster(org_id), SETTINGS.base_url)
 
 
 # -- acting ----------------------------------------------------------------------------
@@ -219,7 +215,7 @@ def run_agent(org_id: str, payload: dict = Body(default={})) -> dict[str, Any]:
         org_id,
         clock=SystemClock(),
         notifier=get_notifier(),
-        base_url=BASE_URL,
+        base_url=SETTINGS.base_url,
     )
     result = zamu(message)
     return {
@@ -362,7 +358,12 @@ def reset_demo() -> dict[str, Any]:
     Only ever touches the demo organisation.
     """
     store = get_store()
-    store.delete_org(DEMO_ORG_ID)
-    get_notifier().clear()
+    delete = getattr(store, "delete_org", None)
+    if delete is None:
+        raise HTTPException(status_code=400, detail="this backing cannot reset the sandbox")
+    delete(DEMO_ORG_ID)
+    clear = getattr(get_notifier(), "clear", None)
+    if clear is not None:
+        clear()
     org_id = seed(store, SystemClock().now())
     return {"reset": True, "org_id": org_id}

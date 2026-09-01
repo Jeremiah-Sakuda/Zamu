@@ -18,7 +18,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from zamu.core.errors import NotFound
+from zamu.core.errors import Conflict, NotFound
 from zamu.core.models import (
     ActionRecord,
     Ask,
@@ -257,22 +257,30 @@ class SqliteStore:
     def append_action(self, record: ActionRecord) -> ActionRecord:
         """Append-only by construction: the unique index on the idempotency key means a
         repeated attempt collides at the database rather than relying on a prior read."""
-        with self._lock, self._conn:
-            row = self._conn.execute(
-                "SELECT COALESCE(MAX(seq), 0) + 1 AS next FROM actions WHERE org_id = ?",
-                (record.org_id,),
-            ).fetchone()
-            self._conn.execute(
-                "INSERT INTO actions (org_id, id, seq, idempotency_key, doc) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (
-                    record.org_id,
-                    record.id,
-                    int(row["next"]),
-                    record.idempotency_key,
-                    json.dumps(serde.dump_action(record)),
-                ),
-            )
+        try:
+            with self._lock, self._conn:
+                row = self._conn.execute(
+                    "SELECT COALESCE(MAX(seq), 0) + 1 AS next FROM actions WHERE org_id = ?",
+                    (record.org_id,),
+                ).fetchone()
+                self._conn.execute(
+                    "INSERT INTO actions (org_id, id, seq, idempotency_key, doc) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (
+                        record.org_id,
+                        record.id,
+                        int(row["next"]),
+                        record.idempotency_key,
+                        json.dumps(serde.dump_action(record)),
+                    ),
+                )
+        except sqlite3.IntegrityError as exc:
+            # Raised as Conflict rather than a driver error so every backing signals a
+            # duplicate idempotency key the same way and the Ledger can treat it as the
+            # replay it is.
+            raise Conflict(
+                f"idempotency key {record.idempotency_key} already used in {record.org_id}"
+            ) from exc
         return record
 
     def update_action(self, record: ActionRecord) -> ActionRecord:

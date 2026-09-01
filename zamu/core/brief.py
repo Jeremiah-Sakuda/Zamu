@@ -77,6 +77,17 @@ class Brief:
     def is_quiet(self) -> bool:
         return not (self.filled or self.waiting or self.needs_decision or self.not_allowed)
 
+    @property
+    def worth_sending(self) -> bool:
+        """Whether this brief justifies arriving in somebody's inbox.
+
+        A decision to make, or work Zamu completed, is worth a message. An ask that is
+        still open is not: nothing has happened yet, the coordinator can do nothing
+        about it, and Zamu will tell them when it resolves. Sending on 'waiting' turns
+        the daily handover back into the notification stream it replaced.
+        """
+        return self.needs_human or bool(self.filled)
+
     def as_dict(self) -> dict[str, Any]:
         return {
             "org_id": self.org_id,

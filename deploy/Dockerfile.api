@@ -1,0 +1,32 @@
+# The Zamu HTTP service: the coordinator API and the two volunteer pages.
+#
+#   docker build -f deploy/Dockerfile.api -t zamu-api .
+#   docker run -p 8000:8000 -e ZAMU_BASE_URL=http://localhost:8000 zamu-api
+#
+# Runs on SQLite by default, so it needs no AWS account to be useful. Set
+# ZAMU_STORE=dynamodb to move the same code onto DynamoDB.
+
+FROM public.ecr.aws/docker/library/python:3.13-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    ZAMU_DB=/data/zamu.sqlite
+
+WORKDIR /app
+
+COPY pyproject.toml README.md ./
+COPY zamu ./zamu
+RUN pip install --no-cache-dir ".[api,agent]"
+
+RUN useradd --create-home --uid 10001 zamu \
+ && mkdir -p /data && chown -R zamu:zamu /app /data
+USER zamu
+
+VOLUME ["/data"]
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD python -c "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/health').read()"
+
+CMD ["uvicorn", "zamu.api.app:app", "--host", "0.0.0.0", "--port", "8000"]

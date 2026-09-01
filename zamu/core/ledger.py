@@ -22,6 +22,7 @@ from typing import Any
 
 from zamu.core.authority import Decision, ProposedAction
 from zamu.core.clock import Clock, utc
+from zamu.core.errors import Conflict
 from zamu.core.ids import new_id
 from zamu.core.models import ActionRecord, ActionResult
 from zamu.core.store import Store
@@ -78,7 +79,13 @@ class Ledger:
             duty_id=action.duty_id,
             person_id=action.person_id,
         )
-        return Entry(self._store.append_action(record), replayed=False)
+        try:
+            return Entry(self._store.append_action(record), replayed=False)
+        except Conflict:
+            # Another worker claimed this key between the read above and the write.
+            # That is the idempotency guarantee doing its job, not a failure: whatever
+            # they are doing is the same action, so this call must not execute again.
+            return Entry(self._must_find(action.org_id, idempotency_key), replayed=True)
 
     def record_blocked(
         self, action: ProposedAction, decision: Decision, idempotency_key: str
@@ -110,7 +117,10 @@ class Ledger:
             duty_id=action.duty_id,
             person_id=action.person_id,
         )
-        return self._store.append_action(record)
+        try:
+            return self._store.append_action(record)
+        except Conflict:
+            return self._must_find(action.org_id, idempotency_key)
 
     # -- progressing -----------------------------------------------------------------
 
@@ -151,6 +161,12 @@ class Ledger:
     def fail(self, record: ActionRecord, detail: str) -> ActionRecord:
         """Close a receipt as failed, with the reason the attempt did not complete."""
         return self.close(record, None, result=ActionResult.FAILED, detail=detail)
+
+    def _must_find(self, org_id: str, idempotency_key: str) -> ActionRecord:
+        found = self._store.find_action_by_key(org_id, idempotency_key)
+        if found is None:  # pragma: no cover - the claim exists or the write succeeded
+            raise Conflict(f"idempotency key {idempotency_key} was claimed but not readable")
+        return found
 
     # -- reading ---------------------------------------------------------------------
 

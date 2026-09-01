@@ -1,0 +1,36 @@
+# Zamu on Amazon Bedrock AgentCore Runtime.
+#
+# AgentCore runs linux/arm64 containers that serve POST /invocations and GET /ping on
+# port 8080. Build with:
+#
+#   docker buildx build --platform linux/arm64 -f deploy/Dockerfile.agentcore -t zamu .
+#
+# Python 3.13 rather than 3.14: the runtime images and the AWS SDKs are settled there,
+# and a deployment target is not the place to be first.
+
+FROM --platform=linux/arm64 public.ecr.aws/docker/library/python:3.13-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    ZAMU_STORE=dynamodb \
+    ZAMU_DYNAMO_TABLE=zamu \
+    AWS_REGION=us-east-1
+
+WORKDIR /app
+
+# Dependencies first, so a change to Zamu's own code does not reinstall the world.
+COPY pyproject.toml README.md ./
+COPY zamu ./zamu
+RUN pip install --no-cache-dir ".[agent,agentcore]"
+
+# Run as a non-root user. Nothing here needs to write outside /tmp.
+RUN useradd --create-home --uid 10001 zamu && chown -R zamu:zamu /app
+USER zamu
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD python -c "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8080/ping').read()"
+
+CMD ["python", "-m", "zamu.agentcore.app"]

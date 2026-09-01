@@ -1,0 +1,33 @@
+# Everything Zamu needs, locally, with no AWS account.
+#
+#   docker compose -f deploy/compose.yaml up --build
+#
+# The API seeds the demonstration organization on first start and captures outbound
+# messages in an outbox the console can read, so one person can drive the whole loop.
+
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.api
+    ports:
+      - "8000:8000"
+    environment:
+      ZAMU_BASE_URL: http://localhost:8000
+      ZAMU_CORS_ORIGINS: http://localhost:3000
+      ZAMU_DB: /data/zamu.sqlite
+    volumes:
+      - zamu-data:/data
+
+  console:
+    build:
+      context: ../console
+      args:
+        NEXT_PUBLIC_ZAMU_API: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  zamu-data:
