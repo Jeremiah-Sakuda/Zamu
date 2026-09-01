@@ -304,6 +304,17 @@ class SqliteStore:
             grants=self.list_grants(org_id),
         )
 
+    def delete_org(self, org_id: str) -> None:
+        """Remove one organization and everything belonging to it.
+
+        Used only to reset the public sandbox between visitors. Scoped by org_id on
+        every table so it cannot reach past the demo into a real roster.
+        """
+        with self._conn:
+            for table in ("actions", "asks", "duties", "people", "grants"):
+                self._conn.execute(f"DELETE FROM {table} WHERE org_id = ?", (org_id,))
+            self._conn.execute("DELETE FROM orgs WHERE id = ?", (org_id,))
+
     def latest_action_at(self, org_id: str) -> datetime | None:
         rows = self.list_actions(org_id, limit=1)
         return rows[0].created_at if rows else None
