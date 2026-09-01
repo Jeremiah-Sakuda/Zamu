@@ -199,7 +199,13 @@ def _rest_score(record: FairnessRecord, now: datetime) -> float:
     return _clamp(since / REST_SATURATION)
 
 
-def _rationale(person: Person, duty: Duty, components: Components, load_summary: str) -> str:
+def _rationale(
+    person: Person,
+    duty: Duty,
+    components: Components,
+    load_summary: str,
+    record: FairnessRecord,
+) -> str:
     """The single sentence Zamu says out loud about why this person is first.
 
     Built from whichever components actually drove the decision, so the sentence is
@@ -218,7 +224,10 @@ def _rationale(person: Person, duty: Duty, components: Components, load_summary:
     elif components.fairness <= 0.35:
         clauses.append(f"{load_summary}, so is not the fairest pick")
 
-    if components.rest >= 0.99 and components.responsiveness == 0.5:
+    # Worth saying only about somebody genuinely new. A volunteer who has carried ten
+    # shifts has not "not been asked anything yet" in any sense the coordinator means;
+    # they were simply put on the rota directly.
+    if record.asks_sent == 0 and record.shifts_carried == 0:
         clauses.append("has not been asked anything yet")
     elif components.responsiveness >= 0.8:
         clauses.append("answers reliably")
@@ -288,7 +297,7 @@ def rank(
                 score=components.total,
                 components=components,
                 debt_hours=debts[person.id],
-                rationale=_rationale(person, duty, components, load_summary),
+                rationale=_rationale(person, duty, components, load_summary, record),
                 load_summary=load_summary,
                 contactable_from=eligibility.contactable_from,
                 asks_remaining=eligibility.asks_remaining,

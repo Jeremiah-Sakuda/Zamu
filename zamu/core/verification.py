@@ -29,7 +29,12 @@ class Verification:
         return self.result is ActionResult.VERIFIED
 
 
-def verify(intended: dict[str, Any], observed: dict[str, Any] | None) -> Verification:
+def verify(
+    intended: dict[str, Any],
+    observed: dict[str, Any] | None,
+    *,
+    target: str = "the roster",
+) -> Verification:
     """Compare an intended write against what re-reading the target actually returned.
 
     Three distinguishable outcomes, because they demand different responses:
@@ -40,7 +45,7 @@ def verify(intended: dict[str, Any], observed: dict[str, Any] | None) -> Verific
     if observed is None:
         return Verification(
             ActionResult.FAILED,
-            "Re-reading the roster returned nothing, so the change did not land.",
+            f"Re-reading {target} returned nothing, so the change did not land.",
         )
 
     mismatches = [
@@ -52,11 +57,12 @@ def verify(intended: dict[str, Any], observed: dict[str, Any] | None) -> Verific
     if mismatches:
         return Verification(
             ActionResult.CONFLICTED,
-            "The roster changed, but not to what Zamu intended: " + "; ".join(mismatches),
+            f"{target.capitalize()} changed, but not to what Zamu intended: "
+            + "; ".join(mismatches),
             tuple(mismatches),
         )
 
     return Verification(
         ActionResult.VERIFIED,
-        "Re-read the roster after writing and confirmed the change.",
+        f"Re-read {target} after writing and confirmed the change.",
     )

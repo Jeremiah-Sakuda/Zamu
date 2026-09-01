@@ -41,7 +41,8 @@ def test_a_gap_becomes_a_verified_fill():
     assert asked.outcome is Outcome.ASKED
     assert asked.person_id is not None
     assert asked.policy_rule == "R6-opted-in-and-in-hours"
-    assert "re-read the roster" in asked.detail.lower()
+    # A send writes an ask row, not the roster, and the receipt says so.
+    assert "re-read the ask" in asked.detail.lower()
 
     # Exactly one person heard from Zamu. Broadcast is the failure mode.
     assert len(notifier.sent) == 1

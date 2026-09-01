@@ -105,6 +105,11 @@ class PlannedModel(Model):
         self._config = config or {"model_id": "zamu-deterministic-planner"}
         self.steps: list[Step] = []
 
+    @property
+    def model_name(self) -> str:
+        """Named so logs and the console always say which path produced a result."""
+        return "deterministic-planner"
+
     # -- Model interface ---------------------------------------------------------------
 
     def get_config(self) -> Any:

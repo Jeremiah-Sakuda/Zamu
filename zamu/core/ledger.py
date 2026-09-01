@@ -125,6 +125,7 @@ class Ledger:
         *,
         result: ActionResult | None = None,
         detail: str | None = None,
+        target: str = "the roster",
     ) -> ActionRecord:
         """Close a receipt by comparing observation to intent.
 
@@ -132,7 +133,7 @@ class Ledger:
         delivery provider raising. Otherwise the comparison decides.
         """
         if result is None:
-            outcome: Verification = verify(record.intended, observed)
+            outcome: Verification = verify(record.intended, observed, target=target)
             result = outcome.result
             detail = detail or outcome.detail
 

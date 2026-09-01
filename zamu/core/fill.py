@@ -441,7 +441,7 @@ class CoverageService:
             )
 
         observed = self._observe_ask(roster.org.id, ask_id)
-        closed = self._ledger.close(executed, observed)
+        closed = self._ledger.close(executed, observed, target="the ask")
 
         return AskOutcome(
             Outcome.ASKED if closed.result is ActionResult.VERIFIED else Outcome.FAILED,
@@ -521,7 +521,9 @@ class CoverageService:
         )
         note = compose_draft_note(person, duty, roster.org, refusal)
         executed = self._ledger.mark_executed(entry.record)
-        closed = self._ledger.close(executed, self._observe_ask(roster.org.id, ask_id))
+        closed = self._ledger.close(
+            executed, self._observe_ask(roster.org.id, ask_id), target="the draft"
+        )
 
         return AskOutcome(
             Outcome.DRAFTED,
