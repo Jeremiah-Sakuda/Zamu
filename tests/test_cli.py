@@ -131,3 +131,63 @@ def test_the_agent_command_runs_the_planner(capsys, db):
     assert code == 0
     assert "deterministic-planner" in out
     assert "Zamu:" in out
+
+
+def test_a_coordinator_can_go_from_a_spreadsheet_to_a_roster(capsys, db, tmp_path):
+    """Setup in one sitting: create an org, paste two exports, see coverage."""
+    people = tmp_path / "people.csv"
+    people.write_text(
+        "Full Name,Email Address,Skills,Consent\n"
+        'Nadia Ferreira,nadia@example.org,"food-safety, driver",yes\n'
+        "Sam Okoro,sam@example.org,food-safety,no\n"
+        ",broken@example.org,food-safety,yes\n"
+    )
+    duties = tmp_path / "duties.csv"
+    duties.write_text(
+        "Shift,Start,End,Role,Requires,Assigned To\n"
+        "Evening distribution,2026-10-01 18:00,2026-10-01 20:00,"
+        "Distribution,food-safety,Nadia Ferreira\n"
+        "Saturday intake,2026-10-03 08:00,2026-10-03 13:00,Intake,food-safety,\n"
+    )
+
+    code, out = run(capsys, db, "new-org", "Northside Pantry", "--id", "org_north")
+    assert code == 0
+    assert "org_north" in out
+    # The new-org output tells them what Zamu still may not do.
+    assert "grant send_ask" in out
+
+    code, out = run(capsys, db, "--org", "org_north", "import", "people", str(people))
+    assert code == 0
+    assert "Imported 2 people. 1 row skipped." in out
+    assert "Row 4: no name." in out
+    assert "consent belongs to them" in out
+
+    code, out = run(capsys, db, "--org", "org_north", "import", "duties", str(duties))
+    assert code == 0
+    assert "Imported 2 duties." in out
+
+    _, out = run(capsys, db, "--org", "org_north", "status")
+    assert "Someone is assigned but has never confirmed." in out
+    assert "Nobody is assigned to this duty." in out
+
+
+def test_a_dry_run_writes_nothing(capsys, db, tmp_path):
+    people = tmp_path / "people.csv"
+    people.write_text("Name,Email\nSam Okoro,sam@example.org\n")
+    run(capsys, db, "new-org", "Northside", "--id", "org_north")
+
+    _, out = run(capsys, db, "--org", "org_north", "import", "people", str(people), "--dry-run")
+    assert "Nothing was written" in out
+
+    store = SqliteStore(db)
+    try:
+        assert store.list_people("org_north") == ()
+    finally:
+        store.close()
+
+
+def test_importing_into_an_org_that_does_not_exist_says_how_to_make_one(capsys, db, tmp_path):
+    people = tmp_path / "people.csv"
+    people.write_text("Name,Email\nSam,sam@example.org\n")
+    code = main(["--db", db, "--org", "org_missing", "import", "people", str(people)])
+    assert code == 1

@@ -21,7 +21,7 @@ from zamu.core.errors import NotFound, ZamuError
 from zamu.core.fairness import build_records, cohort_mean_load, describe_load
 from zamu.core.fill import CoverageService
 from zamu.core.messages import format_when
-from zamu.core.models import ActionClass, CoverageState, Grant
+from zamu.core.models import ActionClass, CoverageState, Grant, Org
 from zamu.demo import DEMO_ORG_ID, seed
 from zamu.infra.notify import OutboxNotifier
 from zamu.infra.sqlite_store import SqliteStore
@@ -351,6 +351,75 @@ def cmd_grant(args, *, revoke: bool) -> int:
     return 0
 
 
+def cmd_new_org(args) -> int:
+    """Create an organization. The first thing a real coordinator does."""
+    from zamu.core.ids import new_id
+
+    store = SqliteStore(args.db)
+    org_id = args.id or new_id("org")
+    store.put_org(Org(id=org_id, name=args.name, timezone=args.timezone))
+
+    print(heading(f"Created {args.name}"))
+    print(f"  org        {org_id}")
+    print(f"  timezone   {args.timezone}")
+    print()
+    print(muted("  Zamu can read this roster and draft asks. It cannot message anybody"))
+    print(muted("  or change the roster until you grant those separately:"))
+    print(muted(f"    zamu --org {org_id} grant send_ask"))
+    print(muted(f"    zamu --org {org_id} grant write_roster"))
+    return 0
+
+
+def cmd_import(args) -> int:
+    """Import people or duties from a spreadsheet exported as CSV."""
+    from zamu.infra.importer import apply, read_duties, read_people
+
+    store = SqliteStore(args.db)
+    org = store.get_org(args.org)
+    if org is None:
+        raise NotFound(f"No organization {args.org}. Create one with: zamu new-org \"Name\"")
+
+    content = Path(args.file).read_text(encoding="utf-8")
+
+    if args.what == "people":
+        report = read_people(content, org.id, timezone_name=org.timezone)
+    else:
+        report = read_duties(
+            content,
+            org.id,
+            timezone_name=org.timezone,
+            people=list(store.list_people(org.id)),
+        )
+
+    if not args.dry_run:
+        apply(store, report)
+
+    print(heading(report.summary()))
+    if args.dry_run:
+        print(muted("  Nothing was written. Drop --dry-run to import."))
+
+    for person in report.people[:8]:
+        quals = ", ".join(sorted(person.qualifications)) or "no qualifications recorded"
+        print(f"  {person.name:24} {muted(quals)}")
+    for duty in report.duties[:8]:
+        print(f"  {duty.title:24} {muted(format_when(duty, org.timezone))}")
+    if len(report.people) + len(report.duties) > 8:
+        print(muted("  ..."))
+
+    if report.problems:
+        print()
+        print(paint("  Could not read:", AMBER))
+        for problem in report.problems:
+            print(muted(f"    · {problem}"))
+
+    if args.what == "people" and report.people:
+        print()
+        print(muted("  Nobody is opted in to being messaged by Zamu unless your file said"))
+        print(muted("  so. That consent belongs to them, not to the spreadsheet."))
+
+    return 0 if report.ok else 1
+
+
 def cmd_agent(args) -> int:
     """Hand the roster to the agent and let it decide what to do."""
     from zamu.agent.build import build_agent
@@ -523,6 +592,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--by", default="cli")
     p.add_argument("--note", default="")
     p.set_defaults(func=lambda a: cmd_grant(a, revoke=True))
+
+    p = sub.add_parser("new-org", help="create an organization")
+    p.add_argument("name")
+    p.add_argument("--timezone", default="UTC")
+    p.add_argument("--id", default=None)
+    p.set_defaults(func=cmd_new_org)
+
+    p = sub.add_parser("import", help="import people or duties from a CSV export")
+    p.add_argument("what", choices=["people", "duties"])
+    p.add_argument("file")
+    p.add_argument("--dry-run", action="store_true", help="read the file without writing")
+    p.set_defaults(func=cmd_import)
 
     p = sub.add_parser("agent", help="hand the roster to the agent")
     p.add_argument(

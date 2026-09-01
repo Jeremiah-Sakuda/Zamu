@@ -221,3 +221,78 @@ def test_resetting_the_sandbox_puts_the_story_back(client):
     client.post("/api/demo/reset")
     assert client.get(f"/api/orgs/{DEMO_ORG_ID}").json()["summary"]["uncovered"] == 2
     assert client.get(f"/api/orgs/{DEMO_ORG_ID}/receipts").json() == []
+
+
+# -- setup -----------------------------------------------------------------------------
+
+PEOPLE_CSV = """Full Name,Email Address,Skills,Consent
+Nadia Ferreira,nadia@example.org,"food-safety, driver",yes
+Sam Okoro,sam@example.org,food-safety,no
+,broken@example.org,food-safety,yes
+"""
+
+DUTIES_CSV = """Shift,Start,End,Role,Requires,Assigned To
+Evening distribution,2026-10-01 18:00,2026-10-01 20:00,Distribution,food-safety,Nadia Ferreira
+Saturday intake,2026-10-03 08:00,2026-10-03 13:00,Intake,food-safety,
+"""
+
+
+def test_a_coordinator_can_set_up_an_organization_in_one_sitting(client):
+    org = client.post(
+        "/api/orgs", json={"name": "Northside Pantry", "timezone": "America/Chicago"}
+    ).json()
+    org_id = org["id"]
+    assert org["name"] == "Northside Pantry"
+
+    people = client.post(
+        f"/api/orgs/{org_id}/import/people", json={"csv": PEOPLE_CSV}
+    ).json()
+    assert people["imported_people"] == 2
+    assert people["skipped_rows"] == 1
+    assert "Row 4" in people["problems"][0]
+    assert people["summary"] == "Imported 2 people. 1 row skipped."
+
+    duties = client.post(
+        f"/api/orgs/{org_id}/import/duties", json={"csv": DUTIES_CSV}
+    ).json()
+    assert duties["imported_duties"] == 2
+
+    console = client.get(f"/api/orgs/{org_id}").json()
+    assert len(console["people"]) == 2
+    assert len(console["duties"]) == 2
+    # Nothing was granted, so Zamu can read and draft but not message anybody.
+    granted = {g["key"] for g in console["grants"] if g["granted"]}
+    assert granted == {"read"}
+
+
+def test_an_imported_assignment_is_unconfirmed_not_covered(client):
+    """Importing a spreadsheet as though every row were a confirmed promise is how
+    coverage software starts lying."""
+    org_id = client.post("/api/orgs", json={"name": "Northside"}).json()["id"]
+    client.post(f"/api/orgs/{org_id}/import/people", json={"csv": PEOPLE_CSV})
+    client.post(f"/api/orgs/{org_id}/import/duties", json={"csv": DUTIES_CSV})
+
+    duties = {d["title"]: d for d in client.get(f"/api/orgs/{org_id}/duties").json()}
+    assert duties["Evening distribution"]["state"] == "unknown"
+    assert duties["Evening distribution"]["assigned"]["name"] == "Nadia Ferreira"
+
+
+def test_a_dry_run_reports_without_writing(client):
+    org_id = client.post("/api/orgs", json={"name": "Northside"}).json()["id"]
+    body = client.post(
+        f"/api/orgs/{org_id}/import/people", json={"csv": PEOPLE_CSV, "dry_run": True}
+    ).json()
+
+    assert body["dry_run"] and body["imported_people"] == 2
+    assert body["preview"]["people"][0]["name"] == "Nadia Ferreira"
+    assert client.get(f"/api/orgs/{org_id}/people").json() == []
+
+
+def test_an_org_needs_a_name(client):
+    assert client.post("/api/orgs", json={}).status_code == 400
+
+
+def test_an_unknown_import_target_is_rejected(client):
+    assert client.post(
+        f"/api/orgs/{DEMO_ORG_ID}/import/everything", json={"csv": "a,b\n1,2\n"}
+    ).status_code == 400

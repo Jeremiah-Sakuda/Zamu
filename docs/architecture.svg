@@ -129,7 +129,7 @@
 
   <!-- ============================================== 3. DETERMINISTIC CORE -->
   <rect class="band" x="660" y="100" width="330" height="560" rx="14"/>
-  <text class="band-t" x="680" y="128">3 · Deterministic core · 256 tests</text>
+  <text class="band-t" x="680" y="128">3 · Deterministic core · 287 tests</text>
 
   <rect class="box-d" x="680" y="144" width="290" height="72" rx="10"/>
   <text class="h" x="698" y="168">Coverage</text>

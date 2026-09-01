@@ -30,7 +30,7 @@ from zamu.core.clock import SystemClock
 from zamu.core.errors import NotFound, ZamuError
 from zamu.core.fill import CoverageService
 from zamu.core.ids import new_id
-from zamu.core.models import ActionClass, Grant
+from zamu.core.models import ActionClass, Grant, Org
 from zamu.core.store import Store
 from zamu.demo import DEMO_ORG_ID, seed
 
@@ -232,6 +232,64 @@ def run_agent(org_id: str, payload: dict = Body(default={})) -> dict[str, Any]:
             {"tool": r.tool, "rule": r.rule, "reason": r.reason} for r in zamu.refusals
         ],
     }
+
+
+# -- setup -----------------------------------------------------------------------------
+
+
+@app.post("/api/orgs")
+def create_org(payload: dict = Body(...)) -> dict[str, Any]:
+    """Create an organization. The first thing a real coordinator does."""
+    name = str(payload.get("name") or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name is required")
+
+    org = Org(
+        id=str(payload.get("id") or new_id("org")),
+        name=name,
+        timezone=str(payload.get("timezone") or "UTC"),
+    )
+    get_store().put_org(org)
+    return views.org_view(get_store().load_roster(org.id), SystemClock().now())
+
+
+@app.post("/api/orgs/{org_id}/import/{what}")
+def import_csv(org_id: str, what: str, payload: dict = Body(...)) -> dict[str, Any]:
+    """Import people or duties from a pasted CSV export.
+
+    Returns what was understood *and* what was not, because a coordinator with a messy
+    spreadsheet needs to fix four lines rather than start again. `dry_run` reads the
+    file and reports without writing, so they can look before committing.
+    """
+    from zamu.infra.importer import apply, read_duties, read_people
+
+    roster = _roster(org_id)
+    content = str(payload.get("csv") or payload.get("content") or "")
+    dry_run = bool(payload.get("dry_run"))
+
+    if what == "people":
+        report = read_people(content, org_id, timezone_name=roster.org.timezone)
+    elif what == "duties":
+        report = read_duties(
+            content, org_id, timezone_name=roster.org.timezone, people=list(roster.people)
+        )
+    else:
+        raise HTTPException(status_code=400, detail="import people or duties")
+
+    if not dry_run:
+        apply(get_store(), report)
+
+    body = report.as_dict()
+    body["summary"] = report.summary()
+    body["dry_run"] = dry_run
+    body["preview"] = {
+        "people": [{"name": p.name, "email": p.email} for p in report.people[:20]],
+        "duties": [
+            {"title": d.title, "starts_at": d.start.isoformat()}
+            for d in report.duties[:20]
+        ],
+    }
+    return body
 
 
 # -- grants ----------------------------------------------------------------------------

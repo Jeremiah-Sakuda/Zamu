@@ -55,7 +55,7 @@ right person, and the coordinator sees proof.
 
 **1 · Models interpret. Deterministic code decides.**
 The model reads a message and works out who and which shift. Eligibility, fairness,
-ranking, authority and verification are ordinary Python functions with 256 tests
+ranking, authority and verification are ordinary Python functions with 287 tests
 behind them. The agent chooses *which* tool to call and in what order; it never
 computes the answer. That is what makes it possible to show a coordinator the ranking
 and tell them, truthfully, that the same inputs always produce the same order.
@@ -183,6 +183,34 @@ fastest way to see the argument end to end:
 ./scripts/demo.sh
 ```
 
+## Setting up a real roster
+
+Zamu is for somebody who did not ask for software and will abandon anything that needs
+setup they cannot finish in one sitting. So it takes the spreadsheet they already have.
+
+```bash
+.venv/bin/zamu new-org "Northside Pantry" --timezone America/Chicago
+```
+
+```bash
+.venv/bin/zamu --org <org-id> import people volunteers.csv
+```
+
+Column names are matched loosely, because real spreadsheets say *Name*, *Full Name*,
+*Volunteer*, and `name ` with a trailing space. Bad rows do not reject the file — they
+are imported around and reported by line number, so a coordinator fixes four lines
+rather than starting again.
+
+Two defaults are deliberate and worth knowing:
+
+- **Nobody is opted in to being messaged** unless the file explicitly says so. A
+  coordinator uploading a spreadsheet has not obtained anybody's consent to be
+  contacted by software, and inferring it from a column that happens to hold an email
+  address would make the whole authority model a formality.
+- **An imported assignment is *unconfirmed*, not covered.** Nobody has confirmed
+  anything to Zamu yet. Treating every row of a spreadsheet as a kept promise is how
+  coverage software starts lying on day one.
+
 ## Run the whole product
 
 Two services: a Python API that also serves the volunteer's pages, and a Next.js
@@ -290,7 +318,7 @@ fails loudly instead of quietly changing who gets asked.
 .venv/bin/python -m pytest
 ```
 
-256 tests, and they are the argument rather than the ceremony. The ones worth reading
+287 tests, and they are the argument rather than the ceremony. The ones worth reading
 first:
 
 - `tests/test_authority.py` — the gate, rule by rule, including that a grant for the
